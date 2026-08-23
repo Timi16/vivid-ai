@@ -21,11 +21,15 @@ async def check_all() -> dict:
     tts = (settings.TTS_BASE_URL or settings.ASR_BASE_URL).rstrip("/")
     trans = (settings.TRANSLATE_BASE_URL or settings.ASR_BASE_URL).rstrip("/")
     llm = settings.LLM_BASE_URL.rstrip("/")
+    tools_url = settings.VIVID_TOOLS_URL.rstrip("/")
+    sandbox_url = settings.SANDBOX_URL.rstrip("/")
     checks = [
         _check("llm", f"{llm}/models" if llm else ""),
         _check("asr", f"{asr}/health" if asr else ""),
         _check("tts", f"{tts}/health" if tts else ""),
         _check("translate", f"{trans}/health" if trans else ""),
         _check("embeddings", settings.EMBEDDINGS_URL),
+        _check("browser", f"{tools_url}/health" if tools_url else ""),
+        _check("sandbox", f"{sandbox_url}/health" if sandbox_url else ""),
     ]
     return dict(await asyncio.gather(*checks))

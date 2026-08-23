@@ -42,6 +42,7 @@ class MessageOut(BaseModel):
     tokens_in: int | None
     tokens_out: int | None
     latency_ms: int | None
+    used_tools: bool = False
     created_at: datetime
     attachments: list[AttachmentOut] = []
 

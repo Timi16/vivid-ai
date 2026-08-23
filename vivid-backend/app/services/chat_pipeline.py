@@ -181,7 +181,11 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
         async def _status(label: str):
             await conn.send({"type": "tool_status", "chat_id": chat_id,
                              "text": label})
-        extra, used_tools = await agent.gather_context(text, history, _status)
+        client_tools = ((client_row.config_json or {}).get("tools")
+                        if client_row else None)
+        extra, used_tools = await agent.gather_context(
+            text, history, _status, allowed_tools=client_tools,
+            chat_id=chat_id)
         system_prompt += extra
 
     if _superseded(cancel_event):
@@ -238,9 +242,10 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
     pending = ""
     usage = None
     cancelled = False
+    finish_reason = None
 
     async def _consume(msgs):
-        nonlocal pending, usage, cancelled
+        nonlocal pending, usage, cancelled, finish_reason
         async for ev in llm.stream_chat(msgs, max_tokens):
             if _superseded(cancel_event):
                 cancelled = True
@@ -265,12 +270,27 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
                             await speak_q.put(chunk)
             elif ev["type"] == "usage":
                 usage = ev["usage"]
+                finish_reason = ev.get("finish_reason")
         if stream_tts and pending.strip() and not cancelled:
             await speak_q.put(pending.strip())
             pending = ""
 
     try:
         await _consume(messages)
+        # A reply cut off by the token cap continues seamlessly (text turns
+        # only — voice replies are capped short on purpose). The partial goes
+        # back as the assistant turn and streaming picks up mid-sentence.
+        rounds = 0
+        while (finish_reason == "length" and not voice_reply and not cancelled
+               and rounds < settings.MAX_CONTINUATIONS
+               and len("".join(parts)) < 24_000):
+            rounds += 1
+            finish_reason = None
+            await _consume(messages + [
+                {"role": "assistant", "content": "".join(parts)},
+                {"role": "user", "content":
+                 "Continue your answer from exactly where it stopped. Do not "
+                 "repeat anything you already wrote; just carry on."}])
     except asyncio.CancelledError:
         cancelled = True  # client sent cancel; keep what was generated
     except llm.LLMUnavailable as e:

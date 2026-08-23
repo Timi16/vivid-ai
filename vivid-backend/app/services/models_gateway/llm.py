@@ -31,6 +31,7 @@ async def stream_chat(messages: list[dict], max_tokens: int):
         "stream_options": {"include_usage": True},
     }
     usage = None
+    finish_reason = None
     try:
         async with http.client().stream(
                 "POST", f"{_base()}/chat/completions", json=payload) as r:
@@ -48,12 +49,14 @@ async def stream_chat(messages: list[dict], max_tokens: int):
                     usage = chunk["usage"]
                 choices = chunk.get("choices") or []
                 if choices:
+                    if choices[0].get("finish_reason"):
+                        finish_reason = choices[0]["finish_reason"]
                     tok = (choices[0].get("delta") or {}).get("content")
                     if tok:
                         yield {"type": "token", "text": tok}
     except (httpx.HTTPError, json.JSONDecodeError) as e:
         raise LLMUnavailable(f"LLM request failed: {e}") from e
-    yield {"type": "usage", "usage": usage}
+    yield {"type": "usage", "usage": usage, "finish_reason": finish_reason}
 
 
 async def complete(messages: list[dict], max_tokens: int = 256,

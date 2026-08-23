@@ -15,6 +15,9 @@ x-backend-env: &backend-env
   TRANSLATE_BASE_URL: ${TRANSLATE_BASE_URL:-}
   EMBEDDINGS_URL: ${EMBEDDINGS_URL:-}
   TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+  SANDBOX_URL: http://sandbox:8080
+  VIVID_TOOLS_URL: http://vivid-tools:8005
+  VIVID_TOOLS_TOKEN: ${BROWSER_TOKEN:-}
 
 services:
   postgres:
@@ -60,6 +63,36 @@ services:
       timeout: 3s
       retries: 10
 
+  # Browser automation (Playwright) for the agent's browse tools. Needs
+  # outbound internet; its own SSRF guard blocks private targets.
+  vivid-tools:
+    build: ./vivid-tools
+    environment:
+      BROWSER_TOKEN: ${BROWSER_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8005/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Executes model-generated code. Deliberately: no secrets, no internet
+  # (internal-only network), read-only fs, capped memory/pids/cpu.
+  sandbox:
+    build: ./sandbox
+    networks:
+      - sandbox_net
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    mem_limit: 768m
+    pids_limit: 128
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./vivid-backend
     ports:
@@ -69,12 +102,17 @@ services:
     volumes:
       - ./vivid-backend/app:/app/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - default
+      - sandbox_net
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      sandbox:
         condition: service_healthy
 
   worker:
@@ -107,3 +145,7 @@ services:
 volumes:
   pgdata:
   miniodata:
+
+networks:
+  sandbox_net:
+    internal: true

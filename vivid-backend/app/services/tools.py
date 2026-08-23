@@ -1,24 +1,93 @@
-"""Tool implementations for the agent loop. All of this is CPU + network I/O —
-exactly the work that moves OFF the GPU pod: every tool that ran there was
-another way to crash or stall the process serving the model.
+"""The Vivid tool registry — the single source of truth for tool calling.
 
-Each tool returns a short plain-text observation for the prompt, or raises;
-run() converts failures into an "error: …" observation so the LLM can say it
-could not check rather than inventing an answer.
+Each tool declares everything about itself in one @tool(...) decorator: name,
+planner description, args hint, the status line users see while it runs, and
+an availability predicate. The planner prompt, status events, and gating all
+derive from this registry — adding a tool is ONE function with ONE decorator,
+nothing else in the codebase changes.
+
+Per-client tools (the B2B hook): clients.config_json may carry
+{"tools": ["weather", ...]} to restrict a client to a subset; absent means all
+available tools. Nothing else needs to know.
+
+All of this is CPU + network I/O — exactly the work that was moved OFF the
+GPU pod. A failing tool returns an "error: …" observation so the LLM can say
+it could not check rather than inventing an answer.
 """
 import ast
 import html
+import json
 import operator
 import re
+import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Awaitable, Callable
 from zoneinfo import ZoneInfo
-
-import httpx
 
 from app.core.config import settings
 from app.services.models_gateway import http
 
 _HEADERS = {"User-Agent": "VividAI-backend/0.1"}
+
+
+# ---------------------------------------------------------------- registry
+async def _noop_status(_: str) -> None:
+    pass
+
+
+@dataclass
+class ToolContext:
+    """Turn-scoped context handed to tools that declare context=True: the chat
+    (for per-chat resources like a browser session) and a status callback for
+    progress the user sees live."""
+    chat_id: str | None = None
+    status: Callable[[str], Awaitable[None]] = _noop_status
+
+    def __post_init__(self):
+        if self.status is None:
+            self.status = _noop_status
+
+
+@dataclass
+class Tool:
+    name: str
+    fn: Callable
+    desc: str
+    args: str = ""
+    status: str = "Working on it…"
+    enabled: Callable[[], bool] = lambda: True
+    context: bool = False  # fn signature is (args, ctx) instead of (args)
+
+
+REGISTRY: dict[str, Tool] = {}
+
+
+def tool(name: str, desc: str, args: str = "", status: str = "Working on it…",
+         enabled: Callable[[], bool] = lambda: True, context: bool = False):
+    def deco(fn):
+        REGISTRY[name] = Tool(name=name, fn=fn, desc=desc, args=args,
+                              status=status, enabled=enabled, context=context)
+        return fn
+    return deco
+
+
+def available(allow: list[str] | None = None) -> dict[str, Tool]:
+    """Tools usable right now, optionally restricted to a client's allowlist."""
+    return {name: t for name, t in REGISTRY.items()
+            if t.enabled() and (allow is None or name in allow)}
+
+
+async def run(name: str, args: dict, ctx: ToolContext | None = None) -> str:
+    t = REGISTRY.get(name)
+    if t is None:
+        return f"error: unknown tool '{name}'"
+    try:
+        if t.context:
+            return await t.fn(args or {}, ctx or ToolContext())
+        return await t.fn(args or {})
+    except Exception as e:
+        return f"error: {type(e).__name__}: {e}"
 
 
 async def _get_json(url: str, params: dict | None = None):
@@ -28,6 +97,7 @@ async def _get_json(url: str, params: dict | None = None):
 
 
 # ---------------------------------------------------------------- now
+@tool("now", "current date and time in Nigeria", status="Checking the time…")
 async def tool_now(args: dict) -> str:
     now = datetime.now(ZoneInfo("Africa/Lagos"))
     return now.strftime("Current date and time in Nigeria (WAT): %A %d %B %Y, %H:%M")
@@ -52,6 +122,8 @@ def _eval_node(node):
     raise ValueError("unsupported expression")
 
 
+@tool("calculate", "evaluate an arithmetic expression", args="expression",
+      status="Calculating…")
 async def tool_calculate(args: dict) -> str:
     expr = str(args.get("expression", "")).replace(",", "").replace("^", "**")
     result = _eval_node(ast.parse(expr, mode="eval"))
@@ -65,6 +137,8 @@ _WEATHER_CODES = {0: "clear sky", 1: "mainly clear", 2: "partly cloudy",
                   80: "rain showers", 95: "thunderstorm"}
 
 
+@tool("weather", "current weather for a city", args="city",
+      status="Checking the weather…")
 async def tool_weather(args: dict) -> str:
     city = str(args.get("city", "Lagos"))
     geo = await _get_json("https://geocoding-api.open-meteo.com/v1/search",
@@ -84,6 +158,8 @@ async def tool_weather(args: dict) -> str:
 
 
 # ---------------------------------------------------------------- exchange rate
+@tool("exchange_rate", "currency exchange rate, e.g. USD to NGN",
+      args="base, quote", status="Checking exchange rates…")
 async def tool_exchange_rate(args: dict) -> str:
     base = str(args.get("base", "USD")).upper()
     quote = str(args.get("quote", "NGN")).upper()
@@ -102,6 +178,8 @@ _COIN_IDS = {"btc": "bitcoin", "bitcoin": "bitcoin", "eth": "ethereum",
              "ton": "the-open-network", "sui": "sui", "ltc": "litecoin"}
 
 
+@tool("crypto_price", "current cryptocurrency price", args="symbol",
+      status="Checking prices…")
 async def tool_crypto_price(args: dict) -> str:
     raw = str(args.get("symbol", "bitcoin")).lower().strip()
     coin = _COIN_IDS.get(raw, raw)
@@ -115,6 +193,8 @@ async def tool_crypto_price(args: dict) -> str:
 
 
 # ---------------------------------------------------------------- wikipedia
+@tool("wikipedia", "factual summary of a topic, person or place", args="query",
+      status="Looking that up…")
 async def tool_wikipedia(args: dict) -> str:
     query = str(args.get("query", ""))
     hits = await _get_json("https://en.wikipedia.org/w/api.php",
@@ -130,8 +210,6 @@ async def tool_wikipedia(args: dict) -> str:
 
 # ---------------------------------------------------------------- web search / news
 async def _tavily(query: str, topic: str | None) -> str:
-    if not settings.TAVILY_API_KEY:
-        return "error: web search is not configured (TAVILY_API_KEY missing)"
     payload = {"api_key": settings.TAVILY_API_KEY, "query": query,
                "max_results": 5, "search_depth": "basic"}
     if topic:
@@ -145,10 +223,16 @@ async def _tavily(query: str, topic: str | None) -> str:
     return "Search results:\n" + "\n".join(lines) if lines else "error: no results"
 
 
+@tool("web_search", "search the web for current information", args="query",
+      status="Searching the web…",
+      enabled=lambda: bool(settings.TAVILY_API_KEY))
 async def tool_web_search(args: dict) -> str:
     return await _tavily(str(args.get("query", "")), None)
 
 
+@tool("news", "recent news on a topic", args="query",
+      status="Checking the news…",
+      enabled=lambda: bool(settings.TAVILY_API_KEY))
 async def tool_news(args: dict) -> str:
     return await _tavily(str(args.get("query", "")), "news")
 
@@ -157,52 +241,192 @@ async def tool_news(args: dict) -> str:
 _TAGS = re.compile(r"<(script|style)[^>]*>.*?</\1>|<[^>]+>", re.DOTALL | re.IGNORECASE)
 
 
+@tool("read_url", "fetch and read a web page", args="url",
+      status="Reading the page…")
 async def tool_read_url(args: dict) -> str:
     url = str(args.get("url", ""))
     if not url.startswith(("http://", "https://")):
         return "error: not a valid http(s) url"
     r = await http.client().get(url, timeout=20, follow_redirects=True)
     r.raise_for_status()
-    body = r.text
-    text = html.unescape(_TAGS.sub(" ", body))
+    text = html.unescape(_TAGS.sub(" ", r.text))
     text = re.sub(r"\s+", " ", text).strip()
     return f"Content of {url}: {text[:2500]}"
 
 
-# ---------------------------------------------------------------- registry
-TOOLS = {
-    "now": {"fn": tool_now, "args": "",
-            "desc": "current date and time in Nigeria"},
-    "calculate": {"fn": tool_calculate, "args": "expression",
-                  "desc": "evaluate an arithmetic expression"},
-    "weather": {"fn": tool_weather, "args": "city",
-                "desc": "current weather for a city"},
-    "exchange_rate": {"fn": tool_exchange_rate, "args": "base, quote",
-                      "desc": "currency exchange rate, e.g. USD to NGN"},
-    "crypto_price": {"fn": tool_crypto_price, "args": "symbol",
-                     "desc": "current cryptocurrency price"},
-    "wikipedia": {"fn": tool_wikipedia, "args": "query",
-                  "desc": "factual summary of a topic, person or place"},
-    "web_search": {"fn": tool_web_search, "args": "query",
-                   "desc": "search the web for current information"},
-    "news": {"fn": tool_news, "args": "query",
-             "desc": "recent news on a topic"},
-    "read_url": {"fn": tool_read_url, "args": "url",
-                 "desc": "fetch and read a web page"},
-}
+# ---------------------------------------------------------------- browse
+def _tools_headers() -> dict:
+    if settings.VIVID_TOOLS_TOKEN:
+        return {"Authorization": f"Bearer {settings.VIVID_TOOLS_TOKEN}"}
+    return {}
 
 
-def available() -> dict:
-    if settings.TAVILY_API_KEY:
-        return TOOLS
-    return {k: v for k, v in TOOLS.items() if k not in ("web_search", "news")}
+async def _vt(path: str, payload: dict, timeout: int = 40) -> dict:
+    """One call to the vivid-tools browser service; raises on tool errors."""
+    base = settings.VIVID_TOOLS_URL.rstrip("/")
+    r = await http.client().post(f"{base}{path}", json=payload,
+                                 headers=_tools_headers(), timeout=timeout)
+    r.raise_for_status()
+    body = r.json()
+    if not body.get("ok", True):
+        raise RuntimeError(body.get("error") or "browser error")
+    return body.get("data") or {}
 
 
-async def run(name: str, args: dict) -> str:
-    tool = TOOLS.get(name)
-    if tool is None:
-        return f"error: unknown tool '{name}'"
+@tool("browse_page",
+      ("open ONE web page in a real browser and read what it renders — use "
+       "instead of read_url for JavaScript-heavy sites, or when read_url "
+       "returns empty/garbled content; no clicking or typing"),
+      args="url", status="Browsing the page…",
+      enabled=lambda: bool(settings.VIVID_TOOLS_URL))
+async def tool_browse_page(args: dict) -> str:
+    """One throwaway session per call: no cookies or state leak between users."""
+    url = str(args.get("url", ""))
+    if not url.startswith(("http://", "https://")):
+        return "error: not a valid http(s) url"
+    sid = f"turn-{uuid.uuid4().hex[:12]}"
     try:
-        return await tool["fn"](args or {})
-    except Exception as e:
-        return f"error: {type(e).__name__}: {e}"
+        await _vt("/browse/goto", {"url": url, "session": sid})
+        snap = await _vt("/browse/snapshot", {"session": sid}, 30)
+        return snap.get("snapshot") or "error: empty page"
+    finally:
+        try:
+            await _vt("/browse/close", {"session": sid}, 10)
+        except Exception:
+            pass
+
+
+# --- multi-round browsing agent ----------------------------------------------
+BROWSE_MAX_STEPS = 6
+_BROWSE_JSON = re.compile(r"\{.*\}", re.DOTALL)
+
+_BROWSE_CONTROLLER = """You are operating a web browser to accomplish this goal:
+GOAL: {goal}
+
+Below is a snapshot of the current page: title, headings, text, and numbered
+interactive ELEMENTS. Decide the single next action. Reply with ONLY one JSON
+object, no prose:
+  {{"action": "click", "ref": <n>}}                     click element [n]
+  {{"action": "type", "ref": <n>, "value": "<text>"}}   fill a field
+  {{"action": "submit", "ref": <n>, "value": "<text>"}} fill and press Enter (search boxes)
+  {{"action": "goto", "url": "https://..."}}            open a different page
+  {{"action": "done", "answer": "<what you found>"}}    finish — answer the goal from what the pages showed
+
+You have {remaining} actions left. If the current page already contains what
+the goal needs, reply done with a specific, factual answer. The answer must
+quote only what a snapshot actually showed — include the page title and site
+domain you got it from (e.g. "according to iana.org…"). Never invent content
+that is not in a snapshot.
+Result of your previous action: {last_result}"""
+
+
+@tool("browse",
+      ("interact with a website to accomplish a goal — navigate, click "
+       "links/buttons, type into fields, search within a site, follow "
+       "multi-page flows; give it the starting url and what to achieve. For "
+       "just reading one page use browse_page instead"),
+      args="url, goal", status="Opening the browser…",
+      enabled=lambda: bool(settings.VIVID_TOOLS_URL), context=True)
+async def tool_browse(args: dict, ctx: ToolContext) -> str:
+    """A mini agent-in-a-tool: snapshot -> the LLM picks one action -> execute
+    -> repeat, up to BROWSE_MAX_STEPS. The browser session is keyed to the
+    chat, so a follow-up message can continue on the same page (cookies and
+    all); vivid-tools reaps idle sessions after its TTL."""
+    from app.services.models_gateway import llm
+
+    url = str(args.get("url", ""))
+    goal = str(args.get("goal") or args.get("query") or "read the page").strip()
+    if not url.startswith(("http://", "https://")):
+        return "error: not a valid http(s) url"
+
+    sid = f"chat-{ctx.chat_id}" if ctx.chat_id else f"turn-{uuid.uuid4().hex[:10]}"
+    await _vt("/browse/goto", {"url": url, "session": sid})
+    last_result = f"opened {url}"
+    trail: list[str] = []
+
+    for step in range(BROWSE_MAX_STEPS):
+        snap = await _vt("/browse/snapshot", {"session": sid}, 30)
+        controller = _BROWSE_CONTROLLER.format(
+            goal=goal, remaining=BROWSE_MAX_STEPS - step,
+            last_result=last_result)
+        try:
+            raw = await llm.complete(
+                [{"role": "system", "content": controller},
+                 {"role": "user", "content": snap.get("snapshot") or "(blank page)"}],
+                max_tokens=300, temperature=0.0)
+            match = _BROWSE_JSON.search(raw)
+            decision = json.loads(match.group(0)) if match else {}
+        except Exception as e:
+            return (f"error: browse controller failed ({e}); "
+                    f"last page:\n{(snap.get('snapshot') or '')[:2000]}")
+
+        action = decision.get("action")
+        if action == "done":
+            answer = str(decision.get("answer") or "").strip()
+            steps = f" (steps: {'; '.join(trail)})" if trail else ""
+            return (answer or (snap.get("snapshot") or "")[:2000]) + steps
+
+        try:
+            if action == "goto":
+                new_url = str(decision.get("url", ""))
+                if not new_url.startswith(("http://", "https://")):
+                    raise ValueError("controller produced an invalid url")
+                await ctx.status(f"Opening {new_url[:50]}…")
+                nav = await _vt("/browse/goto", {"url": new_url, "session": sid})
+                last_result = f"opened {nav.get('url')}"
+            elif action in ("click", "type", "submit"):
+                verb = {"click": "Clicking", "type": "Typing",
+                        "submit": "Searching"}[action]
+                await ctx.status(f"{verb}…")
+                res = await _vt("/browse/act", {
+                    "session": sid, "ref": int(decision.get("ref", -1)),
+                    "action": action, "value": str(decision.get("value", ""))})
+                last_result = res.get("did") or action
+            else:
+                break  # unparseable decision — stop burning steps
+            trail.append(last_result)
+        except Exception as e:
+            last_result = f"error: {e}"
+            trail.append(last_result)
+
+    snap = await _vt("/browse/snapshot", {"session": sid}, 30)
+    return ("Ran out of browsing steps. Actions taken: "
+            + "; ".join(trail[-4:]) + "\nFinal page:\n"
+            + (snap.get("snapshot") or ""))[:3500]
+
+
+# ---------------------------------------------------------------- run code
+_FENCE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$")
+
+
+@tool("run_code",
+      ("run a short Python 3 program (stdlib only, no internet) and read "
+       "what it prints — for calculations, data processing, date arithmetic, "
+       "simulations; the program MUST print() its result"),
+      args="code", status="Running code…",
+      enabled=lambda: bool(settings.SANDBOX_URL))
+async def tool_run_code(args: dict) -> str:
+    """Executes in the isolated sandbox container — model-generated code
+    never runs in this process. Each run is a fresh subprocess: no state, no
+    network, no secrets."""
+    code = _FENCE.sub("", str(args.get("code", "")).strip())
+    if not code:
+        return "error: no code provided"
+    r = await http.client().post(
+        f"{settings.SANDBOX_URL.rstrip('/')}/run",
+        json={"code": code, "timeout": settings.SANDBOX_RUN_TIMEOUT},
+        timeout=settings.SANDBOX_RUN_TIMEOUT + 8)
+    r.raise_for_status()
+    res = r.json()
+    out = (res.get("stdout") or "").strip()
+    err = (res.get("stderr") or "").strip()
+    pieces = []
+    if res.get("timed_out"):
+        pieces.append(f"error: the program exceeded {settings.SANDBOX_RUN_TIMEOUT}s and was killed")
+    if out:
+        pieces.append(f"output:\n{out[:3000]}")
+    if err:
+        pieces.append(f"errors:\n{err[:1500]}")
+    if not pieces:
+        pieces.append("the program produced no output — it must print() its result")
+    return "\n".join(pieces)

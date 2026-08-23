@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     # Tool loop (runs in the backend, never on the pod)
     TOOLS_ENABLED: bool = True
     TAVILY_API_KEY: str = ""  # empty disables web_search/news; other tools still work
+    # Code-execution sandbox (its own locked-down container — model-generated
+    # code must NEVER run in this process; empty disables the run_code tool)
+    SANDBOX_URL: str = ""
+    SANDBOX_RUN_TIMEOUT: int = 12  # seconds per program
+    # vivid-tools browser service (Playwright); empty disables browse_page
+    VIVID_TOOLS_URL: str = ""
+    VIVID_TOOLS_TOKEN: str = ""
     # WORKAROUND, not a design rule: tools are skipped for these languages
     # while MADLAD translation is unreliable — the answer falls back to
     # English anyway, so the planner call buys nothing visible.
@@ -57,7 +64,8 @@ class Settings(BaseSettings):
     # Generation
     LLM_CONTEXT_TOKENS: int = 8192  # served model's max_model_len
     HISTORY_TOKEN_BUDGET: int = 5500  # upper bound; the context clamp may lower it
-    MAX_REPLY_TOKENS: int = 1024
+    MAX_REPLY_TOKENS: int = 4096
+    MAX_CONTINUATIONS: int = 2  # extra rounds when a reply hits the token cap
     LLM_TEMPERATURE: float = 1.0
     LLM_TOP_P: float = 0.95
     # Languages whose voice replies stream clause-by-clause into TTS (Piper is

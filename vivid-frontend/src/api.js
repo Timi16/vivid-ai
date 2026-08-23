@@ -59,6 +59,8 @@ export const api = {
     if (chatId) fd.append('chat_id', chatId)
     return request('/attachments', { method: 'POST', body: fd })
   },
+  health: () => request('/health'),
+  modelsHealth: () => request('/health/models'),
   // A cheap authed call; its 401-refresh path guarantees a fresh access token
   // right before a websocket connect.
   ensureFreshToken: () => request('/chats?limit=1'),
