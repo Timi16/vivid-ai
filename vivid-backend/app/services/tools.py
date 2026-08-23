@@ -78,16 +78,21 @@ def available(allow: list[str] | None = None) -> dict[str, Tool]:
             if t.enabled() and (allow is None or name in allow)}
 
 
-async def run(name: str, args: dict, ctx: ToolContext | None = None) -> str:
-    t = REGISTRY.get(name)
-    if t is None:
-        return f"error: unknown tool '{name}'"
+async def run_tool(t: Tool, args: dict, ctx: ToolContext | None = None) -> str:
+    """Execute any Tool object (registry or connector-bound) safely."""
     try:
         if t.context:
             return await t.fn(args or {}, ctx or ToolContext())
         return await t.fn(args or {})
     except Exception as e:
         return f"error: {type(e).__name__}: {e}"
+
+
+async def run(name: str, args: dict, ctx: ToolContext | None = None) -> str:
+    t = REGISTRY.get(name)
+    if t is None:
+        return f"error: unknown tool '{name}'"
+    return await run_tool(t, args, ctx)
 
 
 async def _get_json(url: str, params: dict | None = None):

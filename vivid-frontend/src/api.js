@@ -61,6 +61,9 @@ export const api = {
   },
   health: () => request('/health'),
   modelsHealth: () => request('/health/models'),
+  connectors: () => request('/connectors'),
+  addConnector: (body) => request('/connectors', { method: 'POST', json: body }),
+  deleteConnector: (id) => request(`/connectors/${id}`, { method: 'DELETE' }),
   // A cheap authed call; its 401-refresh path guarantees a fresh access token
   // right before a websocket connect.
   ensureFreshToken: () => request('/chats?limit=1'),

@@ -72,6 +72,10 @@ export default function App() {
   const [activity, setActivity] = useState([]) // live tool/step trail for the turn
   const [error, setError] = useState(null)
   const [sys, setSys] = useState(null) // system status panel data (null = closed)
+  const [connOpen, setConnOpen] = useState(false)
+  const [connectors, setConnectors] = useState([])
+  const [connForm, setConnForm] = useState({ token: '', username: '' })
+  const [connBusy, setConnBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const [newLang, setNewLang] = useState('en')
   const [recording, setRecording] = useState(false)
@@ -378,6 +382,47 @@ export default function App() {
     }
   }
 
+  const toggleConnectors = async () => {
+    if (connOpen) {
+      setConnOpen(false)
+      return
+    }
+    try {
+      setConnectors(await api.connectors())
+      setConnOpen(true)
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  const addGithub = async () => {
+    if (!connForm.token && !connForm.username) return
+    setConnBusy(true)
+    setError(null)
+    try {
+      await api.addConnector({
+        provider: 'github',
+        token: connForm.token,
+        username: connForm.username || null,
+      })
+      setConnForm({ token: '', username: '' })
+      setConnectors(await api.connectors())
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setConnBusy(false)
+    }
+  }
+
+  const removeConnector = async (id) => {
+    try {
+      await api.deleteConnector(id)
+      setConnectors((c) => c.filter((x) => x.id !== id))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   const toggleSystem = async () => {
     if (sys) {
       setSys(null)
@@ -433,6 +478,41 @@ export default function App() {
           {chats.length === 0 && <p className="muted pad">No chats yet.</p>}
         </div>
         <div className="side-foot">
+          <button className="ghost" onClick={toggleConnectors}>
+            {connOpen ? 'Hide connectors' : 'Connectors'}
+          </button>
+          {connOpen && (
+            <div className="sys-panel">
+              {connectors.map((c) => (
+                <div key={c.id} className="sys-row">
+                  <span className="dot ok" />
+                  {c.name}
+                  <span className="sys-detail">{c.mode}</span>
+                  <button className="conn-del" onClick={() => removeConnector(c.id)} title="Disconnect">
+                    ×
+                  </button>
+                </div>
+              ))}
+              {connectors.length === 0 && <div className="sys-row muted">None connected yet</div>}
+              <div className="conn-form">
+                <span className="conn-label">Add GitHub</span>
+                <input
+                  type="password"
+                  placeholder="Personal access token (private repos)"
+                  value={connForm.token}
+                  onChange={(e) => setConnForm({ ...connForm, token: e.target.value })}
+                />
+                <input
+                  placeholder="…or just a username (public only)"
+                  value={connForm.username}
+                  onChange={(e) => setConnForm({ ...connForm, username: e.target.value })}
+                />
+                <button onClick={addGithub} disabled={connBusy || (!connForm.token && !connForm.username)}>
+                  {connBusy ? 'Verifying…' : 'Connect'}
+                </button>
+              </div>
+            </div>
+          )}
           <button className="ghost" onClick={toggleSystem}>
             {sys ? 'Hide status' : 'System status'}
           </button>

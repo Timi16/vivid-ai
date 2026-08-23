@@ -28,9 +28,10 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.db.models import Attachment, Chat, Client, Message
+from app.db.models import Attachment, Chat, Client, Connector, Message
 from app.db.session import async_session
 from app.services import agent, prompt, rate_limit, storage
+from app.services import connectors as connectors_svc
 from app.services.models_gateway import llm, stt, translate as translate_svc, tts
 
 log = logging.getLogger("vivid.pipeline")
@@ -161,6 +162,9 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
             .limit(80)
         )).scalars())
 
+        user_connectors = list((await db.execute(
+            select(Connector).where(Connector.user_id == user_id))).scalars())
+
     system_prompt = prompt.system_prompt_for(client_row, language, voice_reply)
 
     # --- one image per message rides along to the (vision-capable) LLM ---
@@ -185,7 +189,8 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
                         if client_row else None)
         extra, used_tools = await agent.gather_context(
             text, history, _status, allowed_tools=client_tools,
-            chat_id=chat_id)
+            chat_id=chat_id,
+            extra_tools=connectors_svc.tools_for(user_connectors))
         system_prompt += extra
 
     if _superseded(cancel_event):

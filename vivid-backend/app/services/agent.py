@@ -35,10 +35,10 @@ def wants_tools(text: str) -> bool:
     return bool(text) and not _CHITCHAT.match(text)
 
 
-def _planner_prompt(allowed: list[str] | None = None) -> str:
+def _planner_prompt(usable: dict) -> str:
     today = datetime.now(ZoneInfo("Africa/Lagos")).strftime("%A %d %B %Y")
     lines = "\n".join(f"- {name}({t.args}): {t.desc}"
-                      for name, t in tools.available(allowed).items())
+                      for name, t in usable.items())
     return (
         f"Today is {today}. You are a tool planner for a Nigerian assistant. "
         "Your training data is stale: any question about prices, rates, "
@@ -52,11 +52,13 @@ def _planner_prompt(allowed: list[str] | None = None) -> str:
 
 async def gather_context(text: str, history, status_cb,
                          allowed_tools: list[str] | None = None,
-                         chat_id: str | None = None) -> tuple[str, bool]:
+                         chat_id: str | None = None,
+                         extra_tools: dict | None = None) -> tuple[str, bool]:
     """Returns (extra_system_prompt, used_tools). Raises nothing — a broken
     planner or tool degrades to answering without observations.
-    allowed_tools comes from the client's config (B2B hook); None = all."""
-    usable = tools.available(allowed_tools)
+    allowed_tools comes from the client's config (B2B hook); None = all.
+    extra_tools are the user's connector-bound tools for this turn."""
+    usable = {**tools.available(allowed_tools), **(extra_tools or {})}
     ctx = tools.ToolContext(chat_id=chat_id, status=status_cb)
     if not usable:
         return "", False
@@ -66,7 +68,7 @@ async def gather_context(text: str, history, status_cb,
     try:
         # run_code puts whole programs in the args JSON — give it room
         raw = await llm.complete(
-            [{"role": "system", "content": _planner_prompt(allowed_tools)},
+            [{"role": "system", "content": _planner_prompt(usable)},
              {"role": "user", "content": user}],
             max_tokens=700, temperature=0.0)
         match = _JSON.search(raw)
@@ -81,7 +83,7 @@ async def gather_context(text: str, history, status_cb,
         if name not in usable:
             continue
         await status_cb(usable[name].status)
-        result = await tools.run(name, call.get("args") or {}, ctx)
+        result = await tools.run_tool(usable[name], call.get("args") or {}, ctx)
         log.info("tool %s(%s) -> %s", name, call.get("args"), result[:120])
         observations.append(f"[{name}] {result}")
 

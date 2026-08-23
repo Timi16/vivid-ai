@@ -94,6 +94,25 @@ class Attachment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class Connector(Base):
+    """A per-user integration (GitHub, ...) whose credentials turn into
+    per-user tools in the agent loop. One row per (user, provider).
+    TODO: encrypt token at rest before real users arrive."""
+    __tablename__ = "connectors"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(32))
+    name: Mapped[str] = mapped_column(String(128))
+    token: Mapped[str] = mapped_column(String(512), default="")
+    config_json: Mapped[dict | None] = mapped_column(JSONB, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    __table_args__ = (Index("ix_connectors_user_provider", "user_id",
+                            "provider", unique=True),)
+
+
 class MessageEmbedding(Base):
     __tablename__ = "message_embeddings"
 

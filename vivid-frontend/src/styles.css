@@ -333,6 +333,48 @@ main {
 .side-foot {
   padding: 12px 16px;
   border-top: 1px solid #1a2f27;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.conn-del {
+  background: none;
+  border: none;
+  color: #5d7a6d;
+  font-size: 15px;
+  cursor: pointer;
+}
+.conn-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  width: 100%;
+}
+.conn-label {
+  font-size: 12px;
+  color: #7ba191;
+}
+.conn-form input {
+  background: #1a2f27;
+  border: 1px solid #2c453c;
+  color: #e8ede9;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.conn-form button {
+  background: #17936f;
+  border: none;
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+}
+.conn-form button:disabled {
+  background: #2c453c;
+  cursor: default;
 }
 .side-foot .ghost {
   background: none;
