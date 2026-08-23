@@ -1,0 +1,109 @@
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://vivid:vivid@postgres:5432/vivid
+  REDIS_URL: redis://redis:6379/0
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_PUBLIC_ENDPOINT_URL: http://localhost:9000
+  S3_ACCESS_KEY: minioadmin
+  S3_SECRET_KEY: minioadmin
+  S3_BUCKET: vivid
+  JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+  # RunPod model services — set these in a root .env (see .env.example)
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
+  LLM_MODEL: ${LLM_MODEL:-RedHatAI/gemma-3-27b-it-quantized.w4a16}
+  ASR_BASE_URL: ${ASR_BASE_URL:-}
+  TTS_BASE_URL: ${TTS_BASE_URL:-}
+  TRANSLATE_BASE_URL: ${TRANSLATE_BASE_URL:-}
+  EMBEDDINGS_URL: ${EMBEDDINGS_URL:-}
+  TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: vivid
+      POSTGRES_PASSWORD: vivid
+      POSTGRES_DB: vivid
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vivid"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./vivid-backend
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *backend-env
+    volumes:
+      - ./vivid-backend/app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  worker:
+    build: ./vivid-backend
+    command: arq app.workers.worker.WorkerSettings
+    environment:
+      <<: *backend-env
+    volumes:
+      - ./vivid-backend/app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./vivid-frontend
+      target: dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./vivid-frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  miniodata:
