@@ -5,7 +5,7 @@ s ?=
 .DEFAULT_GOAL := help
 
 .PHONY: help up build down stop restart ps logs backend frontend worker \
-	shell db redis health models smoke clean
+	shell db redis health models smoke search-eval clean
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -57,6 +57,9 @@ models: ## Model services (RunPod) health check
 
 smoke: ## End-to-end API smoke test (needs the stack up)
 	$(COMPOSE) exec -T backend python -m app.scripts.smoke_test
+
+search-eval: ## Raw vs rewritten web search on transcripts: make search-eval f=transcripts.txt
+	$(COMPOSE) exec -T backend python -m app.scripts.search_eval $(if $(f),--file /dev/stdin,) < $(if $(f),$(f),/dev/null)
 
 clean: ## DESTROYS DATA: remove containers AND volumes (Postgres, MinIO)
 	$(COMPOSE) down -v

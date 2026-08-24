@@ -64,5 +64,11 @@ there on reload.
   number-spelling) unless `TTS_BASE_URL` is set.
 - `EMBEDDINGS_URL` unset → search uses Postgres full-text only; set it once the
   embeddings service exists (adapter: `services/models_gateway/embeddings.py`).
+- `web_search`/`news` run `services/search.py`: the question is rewritten into
+  `SEARCH_QUERY_VARIANTS` keyword queries (voice transcripts make bad queries),
+  searched in parallel, merged, reranked (`RERANKER_URL`, else Tavily's order)
+  and the top page is read when its snippet is thin. Measure a change with
+  `make search-eval f=transcripts.txt` (one transcript or `tool web_search(…)`
+  log line per file line).
 - Every table carries `client_id` (default `vivid_web`) — the B2B hook. Do not
   build the B2B flow yet.

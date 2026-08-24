@@ -15,7 +15,6 @@ GPU pod. A failing tool returns an "error: …" observation so the LLM can say
 it could not check rather than inventing an answer.
 """
 import ast
-import html
 import json
 import operator
 import re
@@ -26,6 +25,7 @@ from typing import Awaitable, Callable
 from zoneinfo import ZoneInfo
 
 from app.core.config import settings
+from app.services import search
 from app.services.models_gateway import http
 
 _HEADERS = {"User-Agent": "VividAI-backend/0.1"}
@@ -218,49 +218,33 @@ async def tool_wikipedia(args: dict) -> str:
 
 
 # ---------------------------------------------------------------- web search / news
-async def _tavily(query: str, topic: str | None) -> str:
-    payload = {"api_key": settings.TAVILY_API_KEY, "query": query,
-               "max_results": 5, "search_depth": "basic"}
-    if topic:
-        payload["topic"] = topic
-    r = await http.client().post("https://api.tavily.com/search", json=payload,
-                                 timeout=20)
-    r.raise_for_status()
-    data = r.json()
-    lines = [f"- {it['title']}: {it.get('content', '')[:250]}"
-             for it in data.get("results", [])[:5]]
-    return "Search results:\n" + "\n".join(lines) if lines else "error: no results"
-
-
-@tool("web_search", "search the web for current information", args="query",
-      status="Searching the web…",
-      enabled=lambda: bool(settings.TAVILY_API_KEY))
-async def tool_web_search(args: dict) -> str:
-    return await _tavily(str(args.get("query", "")), None)
+# Both run services/search.py: query rewrite -> parallel Tavily -> merge ->
+# rerank -> read the top page when its snippet is thin. context=True only for
+# the live status line ("Reading the top result…").
+@tool("web_search",
+      ("search the web for current information — pass the user's actual "
+       "question or topic; it is turned into search queries automatically"),
+      args="query", status="Searching the web…",
+      enabled=lambda: bool(settings.TAVILY_API_KEY), context=True)
+async def tool_web_search(args: dict, ctx: ToolContext) -> str:
+    return await search.search(str(args.get("query", "")), None, ctx.status)
 
 
 @tool("news", "recent news on a topic", args="query",
       status="Checking the news…",
-      enabled=lambda: bool(settings.TAVILY_API_KEY))
-async def tool_news(args: dict) -> str:
-    return await _tavily(str(args.get("query", "")), "news")
+      enabled=lambda: bool(settings.TAVILY_API_KEY), context=True)
+async def tool_news(args: dict, ctx: ToolContext) -> str:
+    return await search.search(str(args.get("query", "")), "news", ctx.status)
 
 
 # ---------------------------------------------------------------- read url
-_TAGS = re.compile(r"<(script|style)[^>]*>.*?</\1>|<[^>]+>", re.DOTALL | re.IGNORECASE)
-
-
 @tool("read_url", "fetch and read a web page", args="url",
       status="Reading the page…")
 async def tool_read_url(args: dict) -> str:
     url = str(args.get("url", ""))
     if not url.startswith(("http://", "https://")):
         return "error: not a valid http(s) url"
-    r = await http.client().get(url, timeout=20, follow_redirects=True)
-    r.raise_for_status()
-    text = html.unescape(_TAGS.sub(" ", r.text))
-    text = re.sub(r"\s+", " ", text).strip()
-    return f"Content of {url}: {text[:2500]}"
+    return f"Content of {url}: {await search.fetch_page_text(url)}"
 
 
 # ---------------------------------------------------------------- browse

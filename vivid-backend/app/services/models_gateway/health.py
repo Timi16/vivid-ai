@@ -23,12 +23,14 @@ async def check_all() -> dict:
     llm = settings.LLM_BASE_URL.rstrip("/")
     tools_url = settings.VIVID_TOOLS_URL.rstrip("/")
     sandbox_url = settings.SANDBOX_URL.rstrip("/")
+    reranker = settings.RERANKER_URL.rstrip("/")
     checks = [
         _check("llm", f"{llm}/models" if llm else ""),
         _check("asr", f"{asr}/health" if asr else ""),
         _check("tts", f"{tts}/health" if tts else ""),
         _check("translate", f"{trans}/health" if trans else ""),
         _check("embeddings", settings.EMBEDDINGS_URL),
+        _check("reranker", f"{reranker}/health" if reranker else ""),
         _check("browser", f"{tools_url}/health" if tools_url else ""),
         _check("sandbox", f"{sandbox_url}/health" if sandbox_url else ""),
     ]

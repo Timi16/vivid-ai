@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     # Tool loop (runs in the backend, never on the pod)
     TOOLS_ENABLED: bool = True
     TAVILY_API_KEY: str = ""  # empty disables web_search/news; other tools still work
+    # Web search quality (services/search.py). Tavily credits per web_search
+    # call = SEARCH_QUERY_VARIANTS x (2 if advanced else 1); news always runs
+    # basic. Dial these down first if the Tavily budget bites.
+    TAVILY_SEARCH_DEPTH: str = "advanced"  # "basic" (1 credit) | "advanced" (2, better extraction)
+    SEARCH_QUERY_VARIANTS: int = 3  # rewritten queries searched in parallel; 1 = single rewrite
+    SEARCH_TOP_K: int = 3  # snippets handed to the model after reranking
+    # Cross-encoder reranker (BGE-reranker-v2-m3 behind TEI: {url}/rerank).
+    # Empty keeps Tavily's ordering. Shared with RAG once that exists.
+    RERANKER_URL: str = ""
     # Code-execution sandbox (its own locked-down container — model-generated
     # code must NEVER run in this process; empty disables the run_code tool)
     SANDBOX_URL: str = ""
