@@ -1,49 +1,15 @@
 "use client";
 
-import { useState } from "react";
-
 import { Button } from "@/components/ui/button";
 import { Menu, MenuLabel } from "@/components/ui/menu";
 import { BellIcon } from "@/components/ui/icons";
+import { markAllActivityRead, useActivityFeed } from "@/lib/activity";
 import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-interface Notification {
-  id: string;
-  title: string;
-  detail: string;
-  at: string;
-  unread: boolean;
-}
-
-// Placeholder notifications. There is no notifications endpoint yet; this is
-// the shape a real one will return.
-const NOTIFICATIONS: Notification[] = [
-  {
-    id: "1",
-    title: "Your pricing run finished",
-    detail: "14 pages visited, tables extracted.",
-    at: "2026-08-23T09:05:00.000Z",
-    unread: true,
-  },
-  {
-    id: "2",
-    title: "Video is ready",
-    detail: "Total internal reflection, 24 seconds.",
-    at: "2026-08-21T15:35:00.000Z",
-    unread: true,
-  },
-  {
-    id: "3",
-    title: "Welcome to Vivid",
-    detail: "Here is how to get the most out of your first week.",
-    at: "2026-08-18T08:00:00.000Z",
-    unread: false,
-  },
-];
-
 export function NotificationsMenu() {
-  const [items, setItems] = useState(NOTIFICATIONS);
+  // The live in-app activity feed: replies, created files, calls, failures.
+  const items = useActivityFeed();
   const unread = items.filter((item) => item.unread).length;
 
   return (
@@ -74,7 +40,7 @@ export function NotificationsMenu() {
             variant="ghost"
             size="sm"
             className="h-6 px-2 text-[11.5px]"
-            onClick={() => setItems((prev) => prev.map((i) => ({ ...i, unread: false })))}
+            onClick={markAllActivityRead}
           >
             Mark all read
           </Button>
@@ -82,6 +48,11 @@ export function NotificationsMenu() {
       </div>
 
       <div className="flex flex-col gap-1">
+        {items.length === 0 ? (
+          <p className="text-fg/40 px-2.5 py-3 text-[12.5px]">
+            Nothing yet — replies, generated files and calls show up here.
+          </p>
+        ) : null}
         {items.map((item) => (
           <div
             key={item.id}
@@ -97,6 +68,9 @@ export function NotificationsMenu() {
               <span className="text-fg/35 shrink-0 text-[10.5px] font-normal">
                 {relativeTime(new Date(item.at))}
               </span>
+              {item.unread ? (
+                <span aria-hidden="true" className="bg-fg/70 size-1.5 shrink-0 rounded-full" />
+              ) : null}
             </div>
             <span className="text-fg/50 text-[11.5px] leading-snug font-normal">{item.detail}</span>
           </div>

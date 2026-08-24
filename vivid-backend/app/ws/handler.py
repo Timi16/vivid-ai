@@ -146,6 +146,22 @@ async def ws_endpoint(ws: WebSocket):
                     language=data.get("language"),
                     cancel_event=gen_cancel))
 
+            elif mtype == "edit":
+                # Edit-and-regenerate: truncate from the edited message, then
+                # answer the new text. Supersede first — same as a new message.
+                if not await supersede():
+                    await conn.send({"type": "error", "chat_id": chat_id,
+                                     "code": "busy",
+                                     "message": "the previous reply could not be stopped"})
+                    continue
+                gen_cancel = asyncio.Event()
+                gen_chat = chat_id
+                gen_task = asyncio.create_task(chat_pipeline.run_edit_turn(
+                    conn, state, user_id, chat_id,
+                    data.get("message_id") or "",
+                    data.get("text") or "",
+                    cancel_event=gen_cancel))
+
             elif mtype == "audio_start":
                 stop_live_transcribe()
                 audio_chat = chat_id

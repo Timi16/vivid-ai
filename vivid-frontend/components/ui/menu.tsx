@@ -81,10 +81,13 @@ export function MenuSeparator() {
 }
 
 export function MenuLabel({ children }: { children: React.ReactNode }) {
+  // A plain styled element: Base UI's GroupLabel throws unless it sits inside
+  // a Menu.Group, and a heading label shouldn't force that structure on
+  // callers.
   return (
-    <MenuPrimitive.GroupLabel className="text-fg/35 px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-wide uppercase">
+    <div className="text-fg/35 px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-wide uppercase">
       {children}
-    </MenuPrimitive.GroupLabel>
+    </div>
   );
 }
 

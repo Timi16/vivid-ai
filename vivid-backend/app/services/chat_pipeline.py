@@ -513,6 +513,7 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
 
     await conn.send({"type": "done", "chat_id": chat_id,
                      "message_id": assistant_msg_id, "cancelled": cancelled,
+                     "user_message_id": user_msg_id,
                      "translated": translated, "used_tools": used_tools,
                      "text": reply, "attachments": out_attachments,
                      "source_text": reply_src if translated else None,
@@ -571,6 +572,36 @@ async def run_live_transcribe(conn: Connection, state, user_id: str,
             await conn.send({"type": "transcript", "chat_id": chat_id,
                              "text": transcript, "language": detected,
                              "draft": True, "partial": True})
+
+
+async def run_edit_turn(conn: Connection, state, user_id: str, chat_id: str,
+                        message_id: str, text: str,
+                        cancel_event=None) -> None:
+    """Edit a previous user message: the chat is truncated from that message
+    onward (its reply and everything after are discarded), then the edited
+    text runs as a fresh turn — the Claude/ChatGPT edit-and-regenerate flow."""
+    from sqlalchemy import delete as sql_delete
+
+    async with async_session() as db:
+        chat = await db.get(Chat, chat_id)
+        if chat is None or chat.user_id != user_id:
+            return await _error(conn, chat_id, "chat_not_found", "unknown chat")
+        target = await db.get(Message, message_id)
+        if target is None or target.chat_id != chat_id:
+            return await _error(conn, chat_id, "message_not_found",
+                                "that message no longer exists")
+        if target.role != "user":
+            return await _error(conn, chat_id, "bad_request",
+                                "only your own messages can be edited")
+        await db.execute(sql_delete(Message).where(
+            Message.chat_id == chat_id,
+            Message.created_at >= target.created_at))
+        await db.commit()
+
+    await conn.send({"type": "truncated", "chat_id": chat_id,
+                     "from_message_id": message_id})
+    await run_text_turn(conn, state, user_id, chat_id, text,
+                        cancel_event=cancel_event)
 
 
 async def run_transcribe_only(conn: Connection, state, user_id: str,

@@ -19,10 +19,13 @@ export interface ChatEvent {
     | "transcript"
     | "audio_chunk"
     | "done"
+    | "truncated"
     | "error";
   chat_id?: string;
   text?: string;
   message_id?: string | null;
+  user_message_id?: string;
+  from_message_id?: string;
   code?: string;
   message?: string;
   data?: string;
@@ -90,6 +93,11 @@ export async function sendChatMessage(
   ws.send(
     JSON.stringify({ type: "message", chat_id: chatId, text, attachment_ids: attachmentIds })
   );
+}
+
+export async function sendEdit(chatId: string, messageId: string, text: string) {
+  const ws = await chatSocket();
+  ws.send(JSON.stringify({ type: "edit", chat_id: chatId, message_id: messageId, text }));
 }
 
 export function sendCancel(chatId: string) {

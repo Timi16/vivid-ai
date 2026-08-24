@@ -23,9 +23,11 @@ import {
   sendAudioChunk,
   sendCancel,
   sendChatMessage,
+  sendEdit,
   startAudioTurn,
   type ChatEvent,
 } from "@/lib/backend/ws";
+import { pushActivity } from "@/lib/activity";
 import type { LiveMessage } from "@/features/chat/lib/types";
 
 const VAD_THRESHOLD = 0.015;
@@ -52,6 +54,9 @@ export function useLiveThread(
   const [callOpen, setCallOpen] = useState(false);
   const [callState, setCallState] = useState<CallState>("idle");
   const [callLine, setCallLine] = useState("");
+  // After an edit, history is truncated from this message id onward — the
+  // renderer drops the stale tail of the frozen snapshot.
+  const [truncateFrom, setTruncateFrom] = useState<string | null>(null);
 
   const streamerRef = useRef<PcmStreamer | null>(null);
   const voiceModeRef = useRef<"push" | "call" | null>(null);
@@ -155,12 +160,43 @@ export function useLiveThread(
             turnAudioRef.current.push(event.data);
           }
           break;
+        case "truncated":
+          if (event.from_message_id) setTruncateFrom(event.from_message_id);
+          break;
         case "done": {
           setStream("");
           setActivity([]);
           setBusy(false);
           const audio = turnAudioRef.current;
           turnAudioRef.current = [];
+          // Retro-fill the just-sent user message with its database id so it
+          // becomes editable without a reload.
+          if (event.user_message_id) {
+            setLive((prev) => {
+              const next = [...prev];
+              for (let i = next.length - 1; i >= 0; i--) {
+                if (next[i].role === "user" && next[i].id.startsWith("local-")) {
+                  next[i] = { ...next[i], id: event.user_message_id as string };
+                  break;
+                }
+              }
+              return next;
+            });
+          }
+          if (event.message_id && event.text) {
+            pushActivity({
+              kind: "reply",
+              title: "Reply ready",
+              detail: (event.text ?? "").slice(0, 90),
+            });
+            for (const file of event.attachments ?? []) {
+              pushActivity({
+                kind: "file",
+                title: `Created ${file.filename ?? "a file"}`,
+                detail: file.mime,
+              });
+            }
+          }
           if (event.message_id && event.text) {
             setLive((prev) => [
               ...prev,
@@ -204,6 +240,7 @@ export function useLiveThread(
           const message = event.message ?? event.code ?? "Something went wrong";
           setError(message);
           toast(message);
+          pushActivity({ kind: "error", title: "Something failed", detail: message.slice(0, 90) });
           if (voiceModeRef.current === "call" && callOpenRef.current) {
             // Without a connection, re-opening the mic would just loop.
             if (lostConnection) endCall();
@@ -256,6 +293,29 @@ export function useLiveThread(
     []
   );
 
+  const edit = useCallback(async (messageId: string, text: string) => {
+    // Claude-style edit: everything from the edited message onward is
+    // replaced by a fresh answer to the new text.
+    setError(null);
+    setStream("");
+    setActivity([]);
+    setBusy(true);
+    setTruncateFrom(messageId);
+    setLive((prev) => {
+      const index = prev.findIndex((m) => m.id === messageId);
+      const kept = index >= 0 ? prev.slice(0, index) : prev;
+      return [...kept, { id: `local-${Date.now()}`, role: "user", content: text }];
+    });
+    try {
+      await sendEdit(chatRef.current, messageId, text);
+    } catch (err) {
+      setBusy(false);
+      const message = err instanceof Error ? err.message : "Edit failed";
+      setError(message);
+      toast(message);
+    }
+  }, []);
+
   const cancel = useCallback(() => sendCancel(chatRef.current), []);
 
   const toggleMic = useCallback(async () => {
@@ -300,6 +360,8 @@ export function useLiveThread(
     error,
     dismissError: () => setError(null),
     send,
+    edit,
+    truncateFrom,
     cancel,
     recording,
     toggleMic,

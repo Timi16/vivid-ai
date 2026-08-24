@@ -60,6 +60,16 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
     url?: string | null;
   } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+
+  async function saveEdit() {
+    if (!editingId || !editingText.trim()) return;
+    const id = editingId;
+    const text = editingText.trim();
+    setEditingId(null);
+    await thread.edit(id, text);
+  }
   const [ratings, setRatings] = useState<Record<string, "up" | "down">>({});
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [viewerImage, setViewerImage] = useState<{
@@ -117,10 +127,16 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
   }, [session, sessionId]);
 
   const messages = useMemo<LiveMessage[]>(() => {
-    const base = session?.messages ?? [];
+    let base = session?.messages ?? [];
+    // An edit truncated the conversation from this message onward — the
+    // frozen snapshot's tail is stale.
+    if (thread.truncateFrom) {
+      const cut = base.findIndex((m) => m.id === thread.truncateFrom);
+      if (cut >= 0) base = base.slice(0, cut);
+    }
     const seen = new Set(base.map((m) => m.id));
     return [...base, ...thread.live.filter((m) => !seen.has(m.id))];
-  }, [session?.messages, thread.live]);
+  }, [session?.messages, thread.live, thread.truncateFrom]);
 
   // Refreshing mid-turn: the reply finishes and saves server-side seconds
   // after the reload, but the (deliberately frozen) history snapshot predates
@@ -250,7 +266,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
             message.role === "user" ? (
               // The user's turn sits right in its own bubble, the answer sits
               // left at full width, so the two sides of the exchange read apart.
-              <div key={message.id} className="flex flex-col items-end gap-2 pl-12">
+              <div key={message.id} className="group flex flex-col items-end gap-2 pl-12">
                 {message.attachments
                   ?.filter((a) => a.kind === "image" && a.url)
                   .map((a) => (
@@ -265,9 +281,59 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
                       <img src={a.url ?? ""} alt="" className="max-h-[260px] max-w-[280px] rounded-xl" />
                     </button>
                   ))}
-                <p className="vd-glass-control text-fg max-w-full rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed font-medium whitespace-pre-wrap">
-                  {message.content}
-                </p>
+                {editingId === message.id ? (
+                  <div className="vd-glass-card flex w-full flex-col gap-2 p-3">
+                    <textarea
+                      value={editingText}
+                      autoFocus
+                      rows={Math.min(6, editingText.split("\n").length + 1)}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void saveEdit();
+                        }
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      className="text-fg w-full resize-none bg-transparent text-[15px] outline-none"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(null)}
+                        className="text-fg/55 hover:text-fg cursor-pointer rounded-full px-3 py-1.5 text-[12.5px]"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void saveEdit()}
+                        disabled={!editingText.trim()}
+                        className="vd-glass-bright cursor-pointer rounded-full px-4 py-1.5 text-[12.5px] font-semibold disabled:opacity-40"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="vd-glass-control text-fg max-w-full rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed font-medium whitespace-pre-wrap">
+                      {message.content}
+                    </p>
+                    {!message.id.startsWith("local-") ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingId(message.id);
+                          setEditingText(message.content);
+                        }}
+                        className="text-fg/35 hover:text-fg cursor-pointer text-[11.5px] font-medium opacity-0 transition-opacity group-hover:opacity-100"
+                      >
+                        ✎ Edit
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
             ) : (
               <div key={message.id} className="flex flex-col gap-4">
