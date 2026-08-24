@@ -3,15 +3,18 @@ export interface Suggestion {
   prompt: string;
 }
 
-// Starter prompts on the empty composer. Static for now: there is no
-// personalisation endpoint, and inventing one would hide that.
+// Starter prompts on the empty composer. Each one is something Vivid can
+// actually do today: read a page in its browser, run code in the sandbox,
+// convert files, check live rates, or search the web.
 export const SUGGESTIONS: Suggestion[] = [
-  { label: "Research a market", prompt: "Research the market for " },
-  { label: "Build an app", prompt: "Help me build an app that " },
-  { label: "Summarise a paper", prompt: "Summarise this paper: " },
-  { label: "Create an image", prompt: "Create an image of " },
-  { label: "Plan a trip", prompt: "Plan a trip to " },
+  { label: "Read a website", prompt: "Open https://example.com and tell me what it says" },
+  { label: "Dollar to naira today", prompt: "What is the dollar to naira rate right now?" },
+  { label: "Run a simulation", prompt: "Simulate rolling two dice 10,000 times: how often is the sum 7?" },
+  { label: "Convert a file to PDF", prompt: "Convert the image I attach to a PDF" },
+  { label: "Weather in Lagos", prompt: "What is the weather in Lagos right now?" },
   { label: "Explain a concept", prompt: "Explain " },
+  { label: "Write some code", prompt: "Write a Python script that " },
+  { label: "Latest news", prompt: "What is the latest news about " },
 ];
 
 // Rotate the visible set without repeating. Pure, so the caller decides when it

@@ -28,6 +28,13 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(128))
+    # Display profile. For social sign-ins the account `email` is a synthetic
+    # key (the provider's token carries no email); the provider's pass-through
+    # name / email / picture live here as display-only data — never used for
+    # lookup, since the client reports them.
+    name: Mapped[str | None] = mapped_column(String(120), default=None)
+    avatar_url: Mapped[str | None] = mapped_column(String(1024), default=None)
+    profile_email: Mapped[str | None] = mapped_column(String(320), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -53,6 +60,7 @@ class Chat(Base):
         ForeignKey("clients.id"), default=settings.DEFAULT_CLIENT_ID)
     title: Mapped[str | None] = mapped_column(String(200), default=None)
     language: Mapped[str] = mapped_column(String(8), default="en")
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 

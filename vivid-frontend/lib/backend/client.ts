@@ -13,10 +13,25 @@ export const WS_URL = API_BASE.replace(/^http/, "ws") + "/ws";
 
 const TOKEN_KEY = "vivid_tokens";
 
+export interface UserOut {
+  id: string;
+  email: string;
+  name: string | null;
+  avatar_url: string | null;
+  profile_email: string | null;
+  created_at: string;
+}
+
 export interface TokenBundle {
   access_token: string;
   refresh_token: string;
-  user?: { id: string; email: string };
+  user?: UserOut;
+}
+
+export interface GoogleProfile {
+  name?: string | null;
+  email?: string | null;
+  picture?: string | null;
 }
 
 export function getTokens(): TokenBundle | null {
@@ -93,8 +108,22 @@ export interface ChatOut {
   id: string;
   title: string | null;
   language: string;
+  pinned: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ArtifactOut {
+  id: string;
+  kind: "image" | "file";
+  filename: string | null;
+  mime: string;
+  size_bytes: number;
+  url: string;
+  chat_id: string;
+  chat_title: string | null;
+  message_id: string | null;
+  created_at: string;
 }
 
 export interface AttachmentOut {
@@ -121,11 +150,24 @@ export const backend = {
     request<TokenBundle>("/auth/signup", { method: "POST", json: { email, password } }),
   login: (email: string, password: string) =>
     request<TokenBundle>("/auth/login", { method: "POST", json: { email, password } }),
+  // Social sign-in: exchange a Decane access token for our own session. The
+  // Google profile (display-only) rides along so the account gets a name.
+  decaneLogin: (accessToken: string, profile: GoogleProfile = {}) =>
+    request<TokenBundle>("/auth/decane", {
+      method: "POST",
+      json: { access_token: accessToken, ...profile },
+    }),
+  me: () => request<UserOut>("/auth/me"),
+  updateMe: (name: string) =>
+    request<UserOut>("/auth/me", { method: "PATCH", json: { name } }),
   chats: () => request<ChatOut[]>("/chats"),
   chat: (id: string) => request<ChatOut>(`/chats/${id}`),
   createChat: (language = "en") =>
     request<ChatOut>("/chats", { method: "POST", json: { language } }),
   deleteChat: (id: string) => request<null>(`/chats/${id}`, { method: "DELETE" }),
+  updateChat: (id: string, patch: { title?: string; pinned?: boolean }) =>
+    request<ChatOut>(`/chats/${id}`, { method: "PATCH", json: patch }),
+  artifacts: () => request<ArtifactOut[]>("/artifacts"),
   messages: (chatId: string) => request<MessageOut[]>(`/chats/${chatId}/messages`),
   // Synthesizes on first call, then returns the cached audio attachment.
   speakMessage: (chatId: string, messageId: string) =>

@@ -21,6 +21,14 @@ async def init_db() -> None:
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_message_embeddings_hnsw ON message_embeddings "
             "USING hnsw (embedding vector_cosine_ops)"))
+        # create_all never alters existing tables; columns added after the
+        # first deploy are applied idempotently here until real migrations.
+        for column in ("name VARCHAR(120)", "avatar_url VARCHAR(1024)",
+                       "profile_email VARCHAR(320)"):
+            await conn.execute(text(
+                f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {column}"))
+        await conn.execute(text(
+            "ALTER TABLE chats ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE"))
 
     async with async_session() as db:
         # Prompts are product config and deploy with the backend: upsert so a

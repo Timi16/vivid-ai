@@ -14,7 +14,6 @@ export function ComputerComposer() {
       value={prompt}
       onValueChange={setPrompt}
       onSubmit={setPrompt}
-      model="Vivid Computer"
     />
   );
 }

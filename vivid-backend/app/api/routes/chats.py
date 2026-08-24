@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.db.models import Attachment, Chat, Message, User
-from app.schemas.chat import AttachmentOut, ChatCreate, ChatOut, MessageOut
+from app.schemas.chat import (AttachmentOut, ChatCreate, ChatOut, ChatUpdate,
+                              MessageOut)
 from app.services import storage
 from app.services.models_gateway import tts
 
@@ -43,6 +44,20 @@ async def create_chat(body: ChatCreate, user: User = Depends(get_current_user),
 async def get_chat(chat_id: str, user: User = Depends(get_current_user),
                    db: AsyncSession = Depends(get_db)):
     return await _owned_chat(chat_id, user, db)
+
+
+@router.patch("/{chat_id}", response_model=ChatOut)
+async def update_chat(chat_id: str, body: ChatUpdate,
+                      user: User = Depends(get_current_user),
+                      db: AsyncSession = Depends(get_db)):
+    """Rename or pin a chat. Fields left out stay as they are."""
+    chat = await _owned_chat(chat_id, user, db)
+    if body.title is not None:
+        chat.title = body.title.strip() or None
+    if body.pinned is not None:
+        chat.pinned = body.pinned
+    await db.commit()
+    return chat
 
 
 @router.get("/{chat_id}/messages", response_model=list[MessageOut])

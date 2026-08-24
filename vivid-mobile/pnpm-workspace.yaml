@@ -1,0 +1,17 @@
+nodeLinker: hoisted
+# Optional native builds (ws speedups, the eslint resolver). Not needed, so
+# their postinstall scripts are declined rather than left pending.
+allowBuilds:
+  bufferutil: false
+  utf-8-validate: false
+  unrs-resolver: false
+  highlight.js: set this to true or false
+# `expo install` pins the SDK's own patch releases, which are often hours old.
+# The release-age policy stays on for everything else.
+minimumReleaseAgeExclude:
+  - expo
+  - "expo-*"
+  - "@expo/*"
+  - babel-preset-expo
+  - jest-expo
+  - eslint-config-expo

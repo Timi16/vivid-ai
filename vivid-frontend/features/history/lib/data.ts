@@ -7,6 +7,7 @@ export interface HistoryEntry {
   kind: ThreadKind;
   updatedAt: string;
   space?: string;
+  pinned?: boolean;
 }
 
 // Placeholder history. There is no sessions endpoint yet; the shape is what a

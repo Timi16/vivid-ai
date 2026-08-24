@@ -8,6 +8,11 @@ class ChatCreate(BaseModel):
     title: str | None = Field(default=None, max_length=200)
 
 
+class ChatUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+    pinned: bool | None = None
+
+
 class ChatOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -15,8 +20,23 @@ class ChatOut(BaseModel):
     title: str | None
     language: str
     client_id: str
+    pinned: bool = False
     created_at: datetime
     updated_at: datetime
+
+
+class ArtifactOut(BaseModel):
+    """A file Vivid generated for the user, with where it came from."""
+    id: str
+    kind: str
+    filename: str | None
+    mime: str
+    size_bytes: int
+    url: str
+    chat_id: str
+    chat_title: str | None
+    message_id: str | None
+    created_at: datetime
 
 
 class AttachmentOut(BaseModel):
