@@ -1,3 +1,10 @@
 export { UpgradeView } from "./components/upgrade-view";
-export { BILLING_PLANS, priceFor, yearlySavingPercent } from "./lib/plans";
-export type { BillingPlan, Cadence } from "./lib/plans";
+export {
+  BILLING_PLANS,
+  COMPARE_GROUPS,
+  FAQ,
+  priceFor,
+  yearlySavingPercent,
+  yearlyTotal,
+} from "./lib/plans";
+export type { BillingPlan, Cadence, CompareGroup, CompareRow, Faq, PlanId } from "./lib/plans";

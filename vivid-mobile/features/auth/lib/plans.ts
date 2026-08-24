@@ -1,5 +1,5 @@
 export interface Plan {
-  id: "free" | "pro" | "max";
+  id: "free" | "pro" | "pro_plus";
   name: string;
   price: string;
   cadence: string;
@@ -9,20 +9,21 @@ export interface Plan {
   featured?: boolean;
 }
 
-// Prices are placeholders. There is no billing service behind this yet, so
-// nothing here is charged and no plan is persisted.
+// The same three plans as the upgrade page, trimmed to what fits an
+// onboarding step. Prices are placeholders: there is no billing service yet,
+// so nothing here is charged and no plan is persisted.
 export const PLANS: Plan[] = [
   {
     id: "free",
     name: "Free",
     price: "$0",
     cadence: "forever",
-    summary: "Everything you need to get started.",
+    summary: "Try Vivid, for as long as you like.",
     features: [
-      "Unlimited quick answers",
-      "3 advanced searches a day",
-      "Standard model",
-      "Web sources",
+      "Chat in 4 languages",
+      "30 voice minutes a month",
+      "Web search and live rates",
+      "5 file conversions a day",
     ],
   },
   {
@@ -30,28 +31,26 @@ export const PLANS: Plan[] = [
     name: "Pro",
     price: "$20",
     cadence: "per month",
-    summary: "For everyday research and building.",
+    summary: "For everyday work, at full speed.",
     featured: true,
     features: [
-      "Unlimited advanced searches",
-      "Frontier models",
-      "Image and video generation",
-      "File and document analysis",
-      "Spaces and artifacts",
+      "Unlimited voice calls",
+      "Priority responses",
+      "Browse websites and run code",
+      "Unlimited files and exports",
     ],
   },
   {
-    id: "max",
-    name: "Max",
-    price: "$200",
+    id: "pro_plus",
+    name: "Pro Plus",
+    price: "$100",
     cadence: "per month",
-    summary: "For heavy, sustained work.",
+    summary: "For heavy, all-day use.",
     features: [
       "Everything in Pro",
-      "Highest usage limits",
+      "5x usage limits",
       "Computer, for long tasks",
-      "Early access to new models",
-      "Priority support",
+      "Early access and priority support",
     ],
   },
 ];

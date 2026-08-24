@@ -17,11 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Glass } from "@/components/ui/glass";
 import { IconButton } from "@/components/ui/icon-button";
-import { CloseIcon, CopyIcon, DownloadIcon } from "@/components/ui/icons";
+import { CheckIcon, CloseIcon, CopyIcon, DownloadIcon } from "@/components/ui/icons";
 import { AppText } from "@/components/ui/text";
 import { fileExtension, isPreviewable, type Artifact } from "@/features/chat/lib/artifacts";
 import { useTheme } from "@/hooks/use-theme";
-import { copyText } from "@/lib/clipboard";
+import { useCopy } from "@/hooks/use-copy";
 import { RADIUS } from "@/lib/theme";
 import { toast } from "@/lib/toast";
 
@@ -42,10 +42,10 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
   const [view, setView] = useState<"preview" | "code">("preview");
   const showPreview = previewable && view === "preview";
 
+  const { copied, copy: copyToClipboard } = useCopy();
   async function copy() {
     if (artifact?.kind !== "code") return;
-    const ok = await copyText(artifact.content);
-    toast(ok ? "Copied" : "Couldn't copy");
+    if (!(await copyToClipboard(artifact.content))) toast("Couldn't copy");
   }
 
   // A phone has no downloads folder to drop a file into; the share sheet is
@@ -133,8 +133,16 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
                   </View>
                 ) : null}
                 {artifact.kind === "code" ? (
-                  <IconButton label="Copy" size={32} onPress={() => void copy()}>
-                    <CopyIcon size={15} color={theme.fg(0.6)} />
+                  <IconButton
+                    label={copied ? "Copied" : "Copy"}
+                    size={32}
+                    onPress={() => void copy()}
+                  >
+                    {copied ? (
+                      <CheckIcon size={15} color={theme.colors.up} />
+                    ) : (
+                      <CopyIcon size={15} color={theme.fg(0.6)} />
+                    )}
                   </IconButton>
                 ) : null}
                 <IconButton label="Download" size={32} onPress={() => void download()}>

@@ -11,10 +11,11 @@ import {
   DefaultTheme,
   Stack,
   ThemeProvider as NavigationThemeProvider,
+  useRouter,
 } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -70,6 +71,18 @@ function RootNavigator() {
   const { theme } = useTheme();
   const tokens = useAuthTokens();
   const signedIn = tokens !== null;
+  const router = useRouter();
+
+  // When the session flips, replace the whole history rather than push: the
+  // auth screens must never sit under the app (or the app under them) where
+  // a back action could reveal them. Covers every path that clears or sets
+  // tokens, including a 401 inside the API client.
+  const wasSignedIn = useRef(signedIn);
+  useEffect(() => {
+    if (wasSignedIn.current === signedIn) return;
+    wasSignedIn.current = signedIn;
+    router.replace(signedIn ? "/" : "/sign-in");
+  }, [signedIn, router]);
   // The navigator paints its own container background (light grey by
   // default) over everything behind it. Make it transparent so the ambient
   // backdrop shows through every screen, exactly like the web shell.
@@ -90,6 +103,9 @@ function RootNavigator() {
           headerShown: false,
           contentStyle: { backgroundColor: "transparent" },
           animation: "fade",
+          // The root has no legitimate "back": swiping must never reveal the
+          // auth screens under the app, or the app under the auth screens.
+          gestureEnabled: false,
         }}
       >
         {/* The guard is the auth gate: no token, no app. Signing out flips

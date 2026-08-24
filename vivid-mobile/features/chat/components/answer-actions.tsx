@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import {
+  CheckIcon,
   CopyIcon,
   DownloadIcon,
   FlagIcon,
@@ -17,7 +18,7 @@ import {
 } from "@/components/ui/icons";
 import { Menu, MenuItem, MenuSeparator } from "@/components/ui/menu";
 import { useTheme } from "@/hooks/use-theme";
-import { copyText } from "@/lib/clipboard";
+import { useCopy } from "@/hooks/use-copy";
 import { toast } from "@/lib/toast";
 
 interface AnswerActionsProps {
@@ -47,6 +48,7 @@ export function AnswerActions({
 }: AnswerActionsProps) {
   const { theme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { copied, copy } = useCopy();
   const muted = theme.fg(0.6);
 
   function pick(action: () => void) {
@@ -72,16 +74,25 @@ export function AnswerActions({
       >
         <ThumbDownIcon size={15} color={rating === "down" ? theme.colors.down : muted} />
       </IconButton>
-      <IconButton
-        label="Copy answer"
-        size={32}
-        onPress={async () => {
-          const ok = await copyText(answer);
-          toast(ok ? "Answer copied" : "Couldn't copy the answer");
-        }}
-      >
-        <CopyIcon size={15} color={muted} />
-      </IconButton>
+      {copied ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          label="Copied"
+          icon={<CheckIcon size={15} color={theme.colors.up} />}
+          onPress={() => {}}
+        />
+      ) : (
+        <IconButton
+          label="Copy answer"
+          size={32}
+          onPress={async () => {
+            if (!(await copy(answer))) toast("Couldn't copy the answer");
+          }}
+        >
+          <CopyIcon size={15} color={muted} />
+        </IconButton>
+      )}
       <Button
         variant="ghost"
         size="sm"

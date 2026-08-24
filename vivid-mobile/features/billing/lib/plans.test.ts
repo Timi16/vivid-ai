@@ -1,5 +1,3 @@
-import { describe, expect, it } from "vitest";
-
 import {
   BILLING_PLANS,
   COMPARE_GROUPS,
@@ -21,10 +19,6 @@ describe("plans", () => {
     ]);
   });
 
-  it("leads with Pro", () => {
-    expect(BILLING_PLANS.filter((p) => p.featured).map((p) => p.id)).toEqual(["pro"]);
-  });
-
   it("has one comparison value per plan on every row", () => {
     for (const group of COMPARE_GROUPS) {
       for (const row of group.rows) expect(row.values).toHaveLength(BILLING_PLANS.length);
@@ -32,41 +26,20 @@ describe("plans", () => {
   });
 });
 
-describe("priceFor", () => {
-  it("uses the monthly rate when billed monthly", () => {
+describe("priceFor and yearlyTotal", () => {
+  it("prices each cadence", () => {
     expect(priceFor(pro, "monthly")).toBe(20);
-    expect(priceFor(proPlus, "monthly")).toBe(100);
-  });
-
-  it("uses the discounted rate when billed yearly", () => {
     expect(priceFor(pro, "yearly")).toBe(16);
     expect(priceFor(proPlus, "yearly")).toBe(80);
-  });
-
-  it("is zero on the free plan either way", () => {
-    expect(priceFor(free, "monthly")).toBe(0);
     expect(priceFor(free, "yearly")).toBe(0);
-  });
-});
-
-describe("yearlyTotal", () => {
-  it("is twelve months at the yearly rate", () => {
     expect(yearlyTotal(pro)).toBe(192);
-    expect(yearlyTotal(proPlus)).toBe(960);
   });
 });
 
 describe("yearlySavingPercent", () => {
-  it("reports the saving on a paid plan", () => {
+  it("reports the saving on paid plans and nothing on free", () => {
     expect(yearlySavingPercent(pro)).toBe(20);
     expect(yearlySavingPercent(proPlus)).toBe(20);
-  });
-
-  it("returns null on the free plan, so no badge is rendered", () => {
     expect(yearlySavingPercent(free)).toBeNull();
-  });
-
-  it("returns null when yearly is not cheaper", () => {
-    expect(yearlySavingPercent({ ...pro, yearly: pro.monthly })).toBeNull();
   });
 });

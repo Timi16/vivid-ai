@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Linking, Pressable, ScrollView, View } from "react-native";
 import MarkdownDisplay, {
   MarkdownIt,
@@ -6,13 +6,13 @@ import MarkdownDisplay, {
   type RenderRules,
 } from "react-native-markdown-display";
 
-import { CopyIcon } from "@/components/ui/icons";
+import { CheckIcon, CopyIcon } from "@/components/ui/icons";
 import { AppText } from "@/components/ui/text";
 import { TexMath } from "@/features/chat/components/math";
 import type { Artifact } from "@/features/chat/lib/artifacts";
 import { markdownMath } from "@/features/chat/lib/markdown-math";
 import { useTheme } from "@/hooks/use-theme";
-import { copyText } from "@/lib/clipboard";
+import { useCopy } from "@/hooks/use-copy";
 import { FONT } from "@/lib/theme";
 
 interface MarkdownProps {
@@ -39,17 +39,47 @@ export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
     return {
       body,
       paragraph: { marginTop: 5, marginBottom: 5 },
-      heading1: { ...body, fontFamily: FONT.semibold, fontSize: 16, marginTop: 14, marginBottom: 6 },
-      heading2: { ...body, fontFamily: FONT.semibold, fontSize: 16, marginTop: 14, marginBottom: 6 },
-      heading3: { ...body, fontFamily: FONT.semibold, fontSize: 16, marginTop: 14, marginBottom: 6 },
+      heading1: {
+        ...body,
+        fontFamily: FONT.semibold,
+        fontSize: 16,
+        marginTop: 14,
+        marginBottom: 6,
+      },
+      heading2: {
+        ...body,
+        fontFamily: FONT.semibold,
+        fontSize: 16,
+        marginTop: 14,
+        marginBottom: 6,
+      },
+      heading3: {
+        ...body,
+        fontFamily: FONT.semibold,
+        fontSize: 16,
+        marginTop: 14,
+        marginBottom: 6,
+      },
       strong: { fontFamily: FONT.semibold },
       em: { fontStyle: "italic" as const },
       link: { color: fg, textDecorationLine: "underline" as const },
       bullet_list: { marginVertical: 5 },
       ordered_list: { marginVertical: 5 },
       list_item: { marginVertical: 2 },
-      bullet_list_icon: { color: theme.fg(0.6), marginLeft: 6, marginRight: 8, fontSize: 15, lineHeight: 26 },
-      ordered_list_icon: { color: theme.fg(0.6), marginLeft: 6, marginRight: 8, fontSize: 15, lineHeight: 26 },
+      bullet_list_icon: {
+        color: theme.fg(0.6),
+        marginLeft: 6,
+        marginRight: 8,
+        fontSize: 15,
+        lineHeight: 26,
+      },
+      ordered_list_icon: {
+        color: theme.fg(0.6),
+        marginLeft: 6,
+        marginRight: 8,
+        fontSize: 15,
+        lineHeight: 26,
+      },
       code_inline: {
         backgroundColor: theme.fg(0.08),
         color: fg,
@@ -98,7 +128,9 @@ export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
         />
       ),
       math_inline: (node: ASTNode) => <TexMath key={node.key} tex={String(node.content ?? "")} />,
-      math_block: (node: ASTNode) => <TexMath key={node.key} tex={String(node.content ?? "")} display />,
+      math_block: (node: ASTNode) => (
+        <TexMath key={node.key} tex={String(node.content ?? "")} display />
+      ),
     }),
     [onOpenArtifact]
   );
@@ -135,7 +167,7 @@ function CodeBlock({
   onOpen?: (artifact: Artifact) => void;
 }) {
   const { theme } = useTheme();
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopy();
 
   return (
     <View
@@ -178,14 +210,14 @@ function CodeBlock({
           accessibilityRole="button"
           accessibilityLabel="Copy code"
           hitSlop={8}
-          onPress={async () => {
-            await copyText(code);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
+          onPress={() => void copy(code)}
           style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
         >
-          <CopyIcon size={12} color={theme.fg(0.55)} />
+          {copied ? (
+            <CheckIcon size={12} color={theme.colors.up} />
+          ) : (
+            <CopyIcon size={12} color={theme.fg(0.55)} />
+          )}
           <AppText size={11.5} tone={0.55}>
             {copied ? "Copied" : "Copy"}
           </AppText>

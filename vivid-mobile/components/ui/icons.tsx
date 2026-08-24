@@ -783,28 +783,23 @@ export function SparkIcon({ size, color }: IconProps) {
   );
 }
 
-export function GoogleMark({ size = 17, color }: IconProps) {
-  const fill = useStroke(color);
+// Google's own mark, in Google's colours. The one deliberate exception to
+// the monochrome icon set: a third-party brand mark keeps its brand colours.
+export function GoogleMark({ size = 17 }: IconProps) {
   return (
     <Frame size={size}>
       <Path
         d="M21.6 12.23c0-.7-.06-1.37-.18-2.02H12v3.82h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.23c1.89-1.74 2.98-4.3 2.98-7.32Z"
-        fill={fill}
+        fill="#4285F4"
       />
       <Path
         d="M12 22c2.7 0 4.96-.9 6.61-2.43l-3.22-2.5c-.9.6-2.05.95-3.39.95-2.6 0-4.81-1.76-5.6-4.13H3.07v2.6A10 10 0 0 0 12 22Z"
-        fill={fill}
-        opacity={0.75}
+        fill="#34A853"
       />
-      <Path
-        d="M6.4 13.89a6 6 0 0 1 0-3.78v-2.6H3.07a10 10 0 0 0 0 8.98l3.33-2.6Z"
-        fill={fill}
-        opacity={0.55}
-      />
+      <Path d="M6.4 13.89a6 6 0 0 1 0-3.78v-2.6H3.07a10 10 0 0 0 0 8.98l3.33-2.6Z" fill="#FBBC05" />
       <Path
         d="M12 5.98c1.47 0 2.79.5 3.83 1.5l2.85-2.85C16.95 2.99 14.7 2 12 2A10 10 0 0 0 3.07 7.51l3.33 2.6C7.19 7.74 9.4 5.98 12 5.98Z"
-        fill={fill}
-        opacity={0.9}
+        fill="#EA4335"
       />
     </Frame>
   );

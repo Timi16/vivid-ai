@@ -251,11 +251,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
         keyboardDismissMode="interactive"
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 24 }}
       >
-        <AppText display size={24} lineHeight={28}>
-          {heading}
-        </AppText>
-
-        <View style={{ marginTop: 32, gap: 32 }}>
+        <View style={{ gap: 32 }}>
           {messages.map((message) =>
             message.role === "user" ? (
               <UserBubble

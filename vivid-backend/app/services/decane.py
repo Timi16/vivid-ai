@@ -38,8 +38,12 @@ def verify_access_token(token: str) -> dict:
             key = settings.DECANE_VERIFICATION_KEY.replace("\\n", "\n")
         else:
             key = _jwks().get_signing_key_from_jwt(token).key
+        # Decane's clock runs a second or two ahead of ours, so a fresh
+        # token's `iat` can sit in the future and PyJWT rejects it as "not
+        # yet valid". A small leeway absorbs that skew without weakening the
+        # expiry check in any meaningful way.
         claims = jwt.decode(token, key, algorithms=["ES256"],
-                            options={"verify_aud": False})
+                            options={"verify_aud": False}, leeway=30)
     except jwt.PyJWTError as e:
         raise DecaneAuthError(f"invalid token: {e}") from e
     if claims.get("project_id") != settings.DECANE_APP_ID:
