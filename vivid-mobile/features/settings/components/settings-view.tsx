@@ -7,16 +7,17 @@ import { AccountPanel } from "@/features/settings/components/account-panel";
 import { AppearancePanel } from "@/features/settings/components/appearance-panel";
 import { LanguagePanel } from "@/features/settings/components/language-panel";
 import { NotificationsPanel } from "@/features/settings/components/notifications-panel";
+import { ShortcutsPanel } from "@/features/settings/components/shortcuts-panel";
 import { displayEmail, displayName, useMe } from "@/hooks/use-me";
 
-type SettingsTab = "account" | "appearance" | "notifications" | "language";
+type SettingsTab = "account" | "appearance" | "notifications" | "language" | "shortcuts";
 
-// Keyboard shortcuts are desktop-only, so the web's Shortcuts tab is not here.
 const TABS: { value: SettingsTab; label: string }[] = [
   { value: "account", label: "Account" },
   { value: "appearance", label: "Appearance" },
   { value: "notifications", label: "Notifications" },
   { value: "language", label: "Language" },
+  { value: "shortcuts", label: "Shortcuts" },
 ];
 
 interface SettingsViewProps {
@@ -57,6 +58,7 @@ export function SettingsView({ plan, planActionSlot, systemSlot }: SettingsViewP
         {tab === "appearance" ? <AppearancePanel /> : null}
         {tab === "notifications" ? <NotificationsPanel /> : null}
         {tab === "language" ? <LanguagePanel /> : null}
+        {tab === "shortcuts" ? <ShortcutsPanel /> : null}
       </View>
     </View>
   );

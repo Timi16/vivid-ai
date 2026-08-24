@@ -48,3 +48,45 @@ export const NOTIFICATION_SETTINGS: NotificationSetting[] = [
     defaultOn: false,
   },
 ];
+
+export interface Shortcut {
+  keys: string[];
+  action: string;
+}
+
+export interface ShortcutGroup {
+  title: string;
+  shortcuts: Shortcut[];
+}
+
+// Written with the platform modifier resolved at render, so an iPad with a
+// keyboard sees Command and an Android tablet sees Ctrl.
+export const SHORTCUT_GROUPS: ShortcutGroup[] = [
+  {
+    title: "General",
+    shortcuts: [
+      { keys: ["Mod", "K"], action: "Open search" },
+      { keys: ["Mod", "N"], action: "New thread" },
+      { keys: ["Mod", "/"], action: "Show shortcuts" },
+      { keys: ["Mod", "\\"], action: "Toggle the sidebar" },
+    ],
+  },
+  {
+    title: "In a thread",
+    shortcuts: [
+      { keys: ["Enter"], action: "Send" },
+      { keys: ["Shift", "Enter"], action: "New line" },
+      { keys: ["Mod", "C"], action: "Copy the last answer" },
+      { keys: ["Mod", "Shift", "E"], action: "Export the thread" },
+    ],
+  },
+  {
+    title: "Navigation",
+    shortcuts: [
+      { keys: ["G", "H"], action: "Go to history" },
+      { keys: ["G", "S"], action: "Go to spaces" },
+      { keys: ["G", "A"], action: "Go to artifacts" },
+      { keys: ["Esc"], action: "Close a dialog" },
+    ],
+  },
+];

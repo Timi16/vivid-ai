@@ -59,8 +59,8 @@ needs one. The backend's CORS and JWT rules are the boundary.
 | Sidebar hover actions on a chat       | long press opens pin / rename / delete                    |
 | Popover menus, ⌘K palette             | bottom-sheet `Menu`, search button opens the palette      |
 | Artifact panel beside the chat        | artifact sheet over the chat (`react-native-webview`)     |
-| Keyboard shortcuts panel              | dropped (desktop-only)                                    |
-| KaTeX math in answers                 | shown as source text (TODO: native math view)             |
+| KaTeX math in answers                 | MathJax to SVG (`react-native-mathjax-svg`), no WebView   |
+| Shortcut labels from `navigator`      | modifier label from `Platform.OS` (⌘ on iOS, Ctrl else)   |
 
 Everything else, including the streaming hook, the VAD constants, the edit and
 truncate flow, the language picker, and the fixture-backed preview screens, is
@@ -74,6 +74,14 @@ runs the same RMS voice-activity detection as the web (threshold 0.015, 1000 ms
 of silence ends the turn). Playback is module state, exactly as on the web:
 `playWavBase64` queues clause-sized clips, `setPlaybackIdleCallback` reopens the
 mic when the reply finishes.
+
+## Markdown and math
+
+`features/chat/components/markdown.tsx` owns one `markdown-it` parser with
+`features/chat/lib/markdown-math.ts`, a plugin that tokenises `$...$` and
+`$$...$$` exactly like the web's remark-math. `TexMath` renders each token
+through MathJax's TeX input and SVG output in pure JS, memoised per formula,
+and falls back to the TeX source if MathJax rejects it.
 
 ## Google sign-in
 

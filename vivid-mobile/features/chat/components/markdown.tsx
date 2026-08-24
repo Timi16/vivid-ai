@@ -1,10 +1,16 @@
 import { useMemo, useState } from "react";
 import { Linking, Pressable, ScrollView, View } from "react-native";
-import MarkdownDisplay, { type ASTNode, type RenderRules } from "react-native-markdown-display";
+import MarkdownDisplay, {
+  MarkdownIt,
+  type ASTNode,
+  type RenderRules,
+} from "react-native-markdown-display";
 
 import { CopyIcon } from "@/components/ui/icons";
 import { AppText } from "@/components/ui/text";
+import { TexMath } from "@/features/chat/components/math";
 import type { Artifact } from "@/features/chat/lib/artifacts";
+import { markdownMath } from "@/features/chat/lib/markdown-math";
 import { useTheme } from "@/hooks/use-theme";
 import { copyText } from "@/lib/clipboard";
 import { FONT } from "@/lib/theme";
@@ -16,10 +22,14 @@ interface MarkdownProps {
   onOpenArtifact?: (artifact: Artifact) => void;
 }
 
-// Assistant text is markdown (code blocks, lists, tables). The web also
-// renders LaTeX through KaTeX; there is no native KaTeX, so math arrives as
-// its source text here. TODO(math): render $...$ once a native math view is
-// chosen; until then the formula is at least readable.
+// One parser for every message. GFM tables and strikethrough come with the
+// library; `$...$` and `$$...$$` math come from our plugin, matching what the
+// web renders through remark-math + KaTeX.
+const parser = new MarkdownIt({ typographer: true, linkify: true }).use(markdownMath);
+
+// Assistant text is markdown (the model is prompted to use code blocks,
+// lists, tables, and LaTeX math). Math renders through MathJax to SVG, so it
+// sits inside the thread typography rather than looking pasted in.
 export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
   const { theme } = useTheme();
 
@@ -29,47 +39,17 @@ export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
     return {
       body,
       paragraph: { marginTop: 5, marginBottom: 5 },
-      heading1: {
-        ...body,
-        fontFamily: FONT.semibold,
-        fontSize: 16,
-        marginTop: 14,
-        marginBottom: 6,
-      },
-      heading2: {
-        ...body,
-        fontFamily: FONT.semibold,
-        fontSize: 16,
-        marginTop: 14,
-        marginBottom: 6,
-      },
-      heading3: {
-        ...body,
-        fontFamily: FONT.semibold,
-        fontSize: 16,
-        marginTop: 14,
-        marginBottom: 6,
-      },
+      heading1: { ...body, fontFamily: FONT.semibold, fontSize: 16, marginTop: 14, marginBottom: 6 },
+      heading2: { ...body, fontFamily: FONT.semibold, fontSize: 16, marginTop: 14, marginBottom: 6 },
+      heading3: { ...body, fontFamily: FONT.semibold, fontSize: 16, marginTop: 14, marginBottom: 6 },
       strong: { fontFamily: FONT.semibold },
       em: { fontStyle: "italic" as const },
       link: { color: fg, textDecorationLine: "underline" as const },
       bullet_list: { marginVertical: 5 },
       ordered_list: { marginVertical: 5 },
       list_item: { marginVertical: 2 },
-      bullet_list_icon: {
-        color: theme.fg(0.6),
-        marginLeft: 6,
-        marginRight: 8,
-        fontSize: 15,
-        lineHeight: 26,
-      },
-      ordered_list_icon: {
-        color: theme.fg(0.6),
-        marginLeft: 6,
-        marginRight: 8,
-        fontSize: 15,
-        lineHeight: 26,
-      },
+      bullet_list_icon: { color: theme.fg(0.6), marginLeft: 6, marginRight: 8, fontSize: 15, lineHeight: 26 },
+      ordered_list_icon: { color: theme.fg(0.6), marginLeft: 6, marginRight: 8, fontSize: 15, lineHeight: 26 },
       code_inline: {
         backgroundColor: theme.fg(0.08),
         color: fg,
@@ -98,7 +78,7 @@ export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
 
   // Fenced and indented code blocks render through CodeBlock so they carry a
   // header with the language, a copy action and, when a handler is given, an
-  // "Open" action.
+  // "Open" action. Math tokens render through MathJax.
   const rules = useMemo<RenderRules>(
     () => ({
       fence: (node: ASTNode) => (
@@ -117,12 +97,15 @@ export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
           onOpen={onOpenArtifact}
         />
       ),
+      math_inline: (node: ASTNode) => <TexMath key={node.key} tex={String(node.content ?? "")} />,
+      math_block: (node: ASTNode) => <TexMath key={node.key} tex={String(node.content ?? "")} display />,
     }),
     [onOpenArtifact]
   );
 
   return (
     <MarkdownDisplay
+      markdownit={parser}
       style={styles}
       rules={rules}
       onLinkPress={(url) => {

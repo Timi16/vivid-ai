@@ -13,6 +13,7 @@ hands-free calls).
 - `expo-web-browser` for "Continue with Google" through Decane's callback flow (no SDK)
 - `expo-secure-store` for the token bundle, AsyncStorage for preferences and drafts
 - `react-native-webview` for HTML previews and PDFs in the artifact panel
+- `react-native-mathjax-svg` for LaTeX in answers (MathJax to SVG, no WebView)
 
 ## Setup
 
@@ -36,16 +37,19 @@ behind them yet (Computer, Spaces, Customize, Discover).
 
 ## Scripts
 
-| Script           | What it does                               |
-| ---------------- | ------------------------------------------ |
-| `pnpm start`     | Metro dev server (open in the dev build)   |
-| `pnpm typecheck` | `tsc --noEmit`                             |
-| `pnpm lint`      | ESLint via `expo lint`                     |
-| `pnpm test`      | Jest (`jest-expo` preset)                  |
-| `pnpm format`    | Prettier                                   |
-| `pnpm prebuild`  | Regenerate native projects from `app.json` |
+| Script           | What it does                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| `pnpm start`     | Metro dev server (open in the dev build)                                                  |
+| `pnpm typecheck` | `tsc --noEmit`                                                                            |
+| `pnpm lint`      | ESLint via `expo lint`                                                                    |
+| `pnpm test`      | Jest (`jest-expo` preset)                                                                 |
+| `pnpm format`    | Prettier                                                                                  |
+| `pnpm prebuild`  | Regenerate native projects from `app.json`                                                |
+| `pnpm brand`     | Redraw the splash, app icon and favicon into `assets/` (needs Google Chrome to rasterise) |
 
 Run format, lint, typecheck and test before opening a pull request.
+
+The splash screen and icons are drawn in `scripts/brand.mjs`: the Vivid bot beside the wordmark on the black brand ground, monochrome like the rest of the design. Edit the script, run `pnpm brand`, then `pnpm prebuild` so the native projects pick the new images up. The app opens dark by default, as the web does; System and Light are options in Settings, Appearance.
 
 ## Where things live
 

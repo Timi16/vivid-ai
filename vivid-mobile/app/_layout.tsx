@@ -6,10 +6,15 @@ import {
   useFonts,
 } from "@expo-google-fonts/geist";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import {
+  DarkTheme,
+  DefaultTheme,
+  Stack,
+  ThemeProvider as NavigationThemeProvider,
+} from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -65,9 +70,19 @@ function RootNavigator() {
   const { theme } = useTheme();
   const tokens = useAuthTokens();
   const signedIn = tokens !== null;
+  // The navigator paints its own container background (light grey by
+  // default) over everything behind it. Make it transparent so the ambient
+  // backdrop shows through every screen, exactly like the web shell.
+  const navigationTheme = useMemo(() => {
+    const base = theme.mode === "dark" ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: { ...base.colors, background: "transparent", card: "transparent" },
+    };
+  }, [theme.mode]);
 
   return (
-    <>
+    <NavigationThemeProvider value={navigationTheme}>
       <AmbientBackdrop />
       <StatusBar style={theme.mode === "dark" ? "light" : "dark"} />
       <Stack
@@ -88,6 +103,6 @@ function RootNavigator() {
       </Stack>
       <NetworkBanner />
       <Toaster />
-    </>
+    </NavigationThemeProvider>
   );
 }

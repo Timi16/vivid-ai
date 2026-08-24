@@ -48,9 +48,11 @@ export function ThemeProvider({ initialPreference, children }: ThemeProviderProp
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
+// Dark is the brand default, exactly as on the web: a fresh install is dark
+// regardless of the device setting until the person picks System or Light.
 export async function readThemePreference(): Promise<ThemePreference> {
   const stored = await preferences.get(THEME_STORAGE_KEY);
-  return isThemePreference(stored) ? stored : "system";
+  return isThemePreference(stored) ? stored : "dark";
 }
 
 export function useTheme(): ThemeContextValue {
