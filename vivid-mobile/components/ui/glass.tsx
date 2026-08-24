@@ -1,6 +1,13 @@
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { Platform, StyleSheet, View, type StyleProp, type ViewProps, type ViewStyle } from "react-native";
+import {
+  Platform,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewProps,
+  type ViewStyle,
+} from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
 import { RADIUS, type GlassTier } from "@/lib/theme";
@@ -37,7 +44,8 @@ export function Glass({
 }: GlassProps) {
   const { theme } = useTheme();
   const glass = theme.glass[tier];
-  const resolvedRadius = radius ?? (tier === "control" || tier === "bright" ? RADIUS.control : RADIUS.card);
+  const resolvedRadius =
+    radius ?? (tier === "control" || tier === "bright" ? RADIUS.control : RADIUS.card);
   const showBlur = blur ?? glass.blur > 0;
   const dark = theme.mode === "dark";
 

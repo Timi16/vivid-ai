@@ -34,7 +34,17 @@ interface AnswerActionsProps {
 
 // The row under every answer. Everything a session-level flow needs hangs
 // off here: rate, copy, share, export, and the overflow menu for the rest.
-export function AnswerActions({ answer, rating, onRate, onShare, onExport, onRename, onAddToSpace, onReport, onDelete }: AnswerActionsProps) {
+export function AnswerActions({
+  answer,
+  rating,
+  onRate,
+  onShare,
+  onExport,
+  onRename,
+  onAddToSpace,
+  onReport,
+  onDelete,
+}: AnswerActionsProps) {
   const { theme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const muted = theme.fg(0.6);
@@ -46,10 +56,20 @@ export function AnswerActions({ answer, rating, onRate, onShare, onExport, onRen
 
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
-      <IconButton label="Good answer" size={32} variant={rating === "up" ? "control" : "ghost"} onPress={() => onRate("up")}>
+      <IconButton
+        label="Good answer"
+        size={32}
+        variant={rating === "up" ? "control" : "ghost"}
+        onPress={() => onRate("up")}
+      >
         <ThumbUpIcon size={15} color={rating === "up" ? theme.colors.up : muted} />
       </IconButton>
-      <IconButton label="Bad answer" size={32} variant={rating === "down" ? "control" : "ghost"} onPress={() => onRate("down")}>
+      <IconButton
+        label="Bad answer"
+        size={32}
+        variant={rating === "down" ? "control" : "ghost"}
+        onPress={() => onRate("down")}
+      >
         <ThumbDownIcon size={15} color={rating === "down" ? theme.colors.down : muted} />
       </IconButton>
       <IconButton
@@ -62,18 +82,47 @@ export function AnswerActions({ answer, rating, onRate, onShare, onExport, onRen
       >
         <CopyIcon size={15} color={muted} />
       </IconButton>
-      <Button variant="ghost" size="sm" label="Share" icon={<ShareIcon size={15} color={muted} />} onPress={onShare} />
-      <Button variant="ghost" size="sm" label="Export" icon={<DownloadIcon size={15} color={muted} />} onPress={onExport} />
+      <Button
+        variant="ghost"
+        size="sm"
+        label="Share"
+        icon={<ShareIcon size={15} color={muted} />}
+        onPress={onShare}
+      />
+      <Button
+        variant="ghost"
+        size="sm"
+        label="Export"
+        icon={<DownloadIcon size={15} color={muted} />}
+        onPress={onExport}
+      />
       <IconButton label="More actions" size={32} onPress={() => setMenuOpen(true)}>
         <MoreIcon size={15} color={muted} />
       </IconButton>
 
       <Menu open={menuOpen} onOpenChange={setMenuOpen}>
-        <MenuItem label="Rename thread" icon={<PencilIcon size={16} color={theme.fg(0.8)} />} onPress={() => pick(onRename)} />
-        <MenuItem label="Add to a space" icon={<FolderPlusIcon size={16} color={theme.fg(0.8)} />} onPress={() => pick(onAddToSpace)} />
+        <MenuItem
+          label="Rename thread"
+          icon={<PencilIcon size={16} color={theme.fg(0.8)} />}
+          onPress={() => pick(onRename)}
+        />
+        <MenuItem
+          label="Add to a space"
+          icon={<FolderPlusIcon size={16} color={theme.fg(0.8)} />}
+          onPress={() => pick(onAddToSpace)}
+        />
         <MenuSeparator />
-        <MenuItem label="Report session" icon={<FlagIcon size={16} color={theme.fg(0.8)} />} onPress={() => pick(onReport)} />
-        <MenuItem label="Delete thread" tone="danger" icon={<TrashIcon size={16} color={theme.colors.down} />} onPress={() => pick(onDelete)} />
+        <MenuItem
+          label="Report session"
+          icon={<FlagIcon size={16} color={theme.fg(0.8)} />}
+          onPress={() => pick(onReport)}
+        />
+        <MenuItem
+          label="Delete thread"
+          tone="danger"
+          icon={<TrashIcon size={16} color={theme.colors.down} />}
+          onPress={() => pick(onDelete)}
+        />
       </Menu>
     </View>
   );

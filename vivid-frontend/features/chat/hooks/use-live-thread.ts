@@ -64,14 +64,38 @@ export function useLiveThread(
   const callOpenRef = useRef(false);
   const vadRef = useRef<{ voiced: boolean; last: number } | null>(null);
   const chatRef = useRef(chatId);
-  chatRef.current = chatId;
   const languageRef = useRef(language);
-  languageRef.current = language;
   const onDraftRef = useRef(onDraftTranscript);
-  onDraftRef.current = onDraftTranscript;
   // Whether anything is in flight, readable from event handlers.
   const activeRef = useRef(false);
-  activeRef.current = busy || transcribing || recording;
+  // Mirror the latest props/state into refs after each render so socket
+  // callbacks read current values without re-subscribing.
+  useEffect(() => {
+    chatRef.current = chatId;
+    languageRef.current = language;
+    onDraftRef.current = onDraftTranscript;
+    activeRef.current = busy || transcribing || recording;
+  });
+
+  const endCall = useCallback(() => {
+    callOpenRef.current = false;
+    setCallOpen(false);
+    setCallState("idle");
+    setPlaybackIdleCallback(null);
+    stopPlayback();
+    streamerRef.current?.stop();
+    streamerRef.current = null;
+    voiceModeRef.current = null;
+    sendCancel(chatRef.current);
+  }, []);
+
+  const finishListening = useCallback(() => {
+    streamerRef.current?.stop();
+    streamerRef.current = null;
+    setCallState("thinking");
+    setBusy(true);
+    endAudioTurn(chatRef.current);
+  }, []);
 
   const startListening = useCallback(async () => {
     if (!callOpenRef.current) return;
@@ -98,26 +122,6 @@ export function useLiveThread(
       endCall();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const finishListening = useCallback(() => {
-    streamerRef.current?.stop();
-    streamerRef.current = null;
-    setCallState("thinking");
-    setBusy(true);
-    endAudioTurn(chatRef.current);
-  }, []);
-
-  const endCall = useCallback(() => {
-    callOpenRef.current = false;
-    setCallOpen(false);
-    setCallState("idle");
-    setPlaybackIdleCallback(null);
-    stopPlayback();
-    streamerRef.current?.stop();
-    streamerRef.current = null;
-    voiceModeRef.current = null;
-    sendCancel(chatRef.current);
   }, []);
 
   const handleEvent = useCallback(

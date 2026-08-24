@@ -1,10 +1,10 @@
 import { Screen } from "@/components/layout/screen";
-import { ArtifactsView } from "@/features/artifacts";
+import { GeneratedFilesView } from "@/features/artifacts";
 
 export default function ArtifactsRoute() {
   return (
     <Screen>
-      <ArtifactsView />
+      <GeneratedFilesView />
     </Screen>
   );
 }

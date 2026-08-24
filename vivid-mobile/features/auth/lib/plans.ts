@@ -18,7 +18,12 @@ export const PLANS: Plan[] = [
     price: "$0",
     cadence: "forever",
     summary: "Everything you need to get started.",
-    features: ["Unlimited quick answers", "3 advanced searches a day", "Standard model", "Web sources"],
+    features: [
+      "Unlimited quick answers",
+      "3 advanced searches a day",
+      "Standard model",
+      "Web sources",
+    ],
   },
   {
     id: "pro",

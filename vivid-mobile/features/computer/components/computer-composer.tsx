@@ -59,8 +59,24 @@ export function ComputerComposer() {
         }}
       />
 
-      <View style={{ marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
-        <View style={{ height: 32, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10 }}>
+      <View
+        style={{
+          marginTop: 8,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: 6,
+        }}
+      >
+        <View
+          style={{
+            height: 32,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+            paddingHorizontal: 10,
+          }}
+        >
           <AppText size={12.5} tone={0.55}>
             {MODEL}
           </AppText>
@@ -75,7 +91,12 @@ export function ComputerComposer() {
           onPress={submit}
           style={({ pressed }) => ({ opacity: !canSend ? 0.35 : pressed ? 0.8 : 1 })}
         >
-          <Glass tier="bright" sheen radius={16} style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}>
+          <Glass
+            tier="bright"
+            sheen
+            radius={16}
+            style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}
+          >
             <ArrowUpIcon size={16} color={theme.colors.ink} />
           </Glass>
         </Pressable>

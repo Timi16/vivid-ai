@@ -18,7 +18,7 @@ import {
 } from "expo-audio";
 import { File, Paths } from "expo-file-system";
 
-const TARGET_RATE = 16000;
+import { TARGET_RATE, toPcm16 } from "@/lib/backend/pcm";
 
 export type PcmChunkHandler = (buffer: ArrayBuffer, rms: number) => void;
 
@@ -26,23 +26,6 @@ export interface PcmStreamer {
   // Resolves once samples are flowing. Throws if the microphone is denied.
   start: (onChunk: PcmChunkHandler) => Promise<void>;
   stop: () => void;
-}
-
-// Float samples in [-1, 1] at `inputRate` -> int16 at 16 kHz plus the RMS of
-// the chunk. The same arithmetic as the web so the backend hears the same
-// signal and the VAD threshold means the same thing on both.
-export function toPcm16(input: Float32Array, inputRate: number): { buffer: ArrayBuffer; rms: number } | null {
-  const ratio = inputRate / TARGET_RATE;
-  const outLen = Math.floor(input.length / ratio);
-  if (!outLen) return null;
-  const out = new Int16Array(outLen);
-  let sumSq = 0;
-  for (let i = 0; i < outLen; i++) {
-    const sample = Math.max(-1, Math.min(1, input[Math.floor(i * ratio)]));
-    out[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-    sumSq += sample * sample;
-  }
-  return { buffer: out.buffer, rms: Math.sqrt(sumSq / outLen) };
 }
 
 // Voice needs the session in play-and-record mode with the speaker, not the

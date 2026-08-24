@@ -13,11 +13,18 @@ export function ActivityTrail({ steps, busy }: { steps: string[]; busy: boolean 
   const { theme } = useTheme();
   if (!steps.length) return null;
   return (
-    <Glass tier="card" blur={false} style={{ alignSelf: "flex-start", gap: 8, paddingHorizontal: 16, paddingVertical: 12 }}>
+    <Glass
+      tier="card"
+      blur={false}
+      style={{ alignSelf: "flex-start", gap: 8, paddingHorizontal: 16, paddingVertical: 12 }}
+    >
       {steps.map((step, index) => {
         const isLive = index === steps.length - 1 && busy;
         return (
-          <View key={`${index}-${step}`} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View
+            key={`${index}-${step}`}
+            style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+          >
             {isLive ? <Spinner /> : <CheckIcon size={14} color={theme.fg(0.45)} />}
             <AppText size={13} tone={0.7} style={{ flexShrink: 1 }}>
               {step}

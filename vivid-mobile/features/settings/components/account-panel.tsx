@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { LogOutIcon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { AppText } from "@/components/ui/text";
+import { useUpdateName } from "@/hooks/use-me";
 import { useTheme } from "@/hooks/use-theme";
 import { stopPlayback } from "@/lib/backend/audio";
 import { setTokens } from "@/lib/backend/client";
@@ -17,36 +18,41 @@ import { SettingGroup, SettingRow } from "@/features/settings/components/setting
 interface AccountPanelProps {
   name: string;
   email: string;
+  avatarUrl?: string | null;
   plan: string;
   // Rendered in the plan row. The route passes it so settings never imports the
   // billing slice.
   planActionSlot?: React.ReactNode;
 }
 
-export function AccountPanel({ name, email, plan, planActionSlot }: AccountPanelProps) {
+export function AccountPanel({ name, email, avatarUrl, plan, planActionSlot }: AccountPanelProps) {
   const { theme } = useTheme();
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(name);
+  const updateName = useUpdateName();
 
-  // The backend has no profile endpoint yet, so a changed name cannot be
-  // persisted. The row keeps its edit flow so the screen matches the web and
-  // the wiring is a one-line change once the account service ships.
-  function saveName() {
+  async function saveName() {
     const next = draftName.trim();
-    setEditingName(false);
-    if (!next || next === name) return;
-    toast("Name changes aren't available yet", {
-      description: "This turns on once the account service ships.",
-    });
+    if (!next || next === name) {
+      setEditingName(false);
+      return;
+    }
+    try {
+      await updateName.mutateAsync(next);
+      setEditingName(false);
+      toast("Name updated");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Could not update your name");
+    }
   }
 
   return (
     <View style={{ gap: 24 }}>
       <SettingGroup>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 16, padding: 16 }}>
-          <Avatar name={name} size="lg" />
+          <Avatar name={name} src={avatarUrl} size="lg" />
           <View style={{ flex: 1, gap: 2 }}>
             <AppText size={15} weight="semibold" numberOfLines={1}>
               {name}
@@ -65,14 +71,19 @@ export function AccountPanel({ name, email, plan, planActionSlot }: AccountPanel
                 <Input
                   value={draftName}
                   onChangeText={setDraftName}
-                  onSubmitEditing={saveName}
+                  onSubmitEditing={() => void saveName()}
                   returnKeyType="done"
                   autoFocus
                   accessibilityLabel="Display name"
                   containerStyle={{ width: 150, minHeight: 36 }}
                   style={{ paddingVertical: 6, fontSize: 13 }}
                 />
-                <Button size="sm" label="Save" onPress={saveName} />
+                <Button
+                  size="sm"
+                  label="Save"
+                  loading={updateName.isPending}
+                  onPress={() => void saveName()}
+                />
               </View>
             ) : (
               <Button
@@ -110,7 +121,14 @@ export function AccountPanel({ name, email, plan, planActionSlot }: AccountPanel
         <SettingRow
           label="Delete account"
           detail="Removes your account, threads, spaces and generated media. This cannot be undone."
-          control={<Button variant="danger" size="sm" label="Delete account" onPress={() => setDeleteOpen(true)} />}
+          control={
+            <Button
+              variant="danger"
+              size="sm"
+              label="Delete account"
+              onPress={() => setDeleteOpen(true)}
+            />
+          }
         />
       </SettingGroup>
 

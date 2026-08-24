@@ -63,16 +63,20 @@ export function useLiveThread(
   const callOpenRef = useRef(false);
   const vadRef = useRef<{ voiced: boolean; last: number } | null>(null);
   const chatRef = useRef(chatId);
-  chatRef.current = chatId;
   const languageRef = useRef(language);
-  languageRef.current = language;
   const onDraftRef = useRef(onDraftTranscript);
-  onDraftRef.current = onDraftTranscript;
   const streamerRef = useRef(streamer);
-  streamerRef.current = streamer;
   // Whether anything is in flight, readable from event handlers.
   const activeRef = useRef(false);
-  activeRef.current = busy || transcribing || recording;
+  // Mirror the latest props/state into refs after each render so socket
+  // callbacks read current values without re-subscribing.
+  useEffect(() => {
+    chatRef.current = chatId;
+    languageRef.current = language;
+    onDraftRef.current = onDraftTranscript;
+    streamerRef.current = streamer;
+    activeRef.current = busy || transcribing || recording;
+  });
 
   const stopStreamer = useCallback(() => {
     if (!streamingRef.current) return;
@@ -147,7 +151,10 @@ export function useLiveThread(
             break;
           }
           if (event.final) {
-            setLive((prev) => [...prev, { id: `local-${Date.now()}`, role: "user", content: event.text ?? "" }]);
+            setLive((prev) => [
+              ...prev,
+              { id: `local-${Date.now()}`, role: "user", content: event.text ?? "" },
+            ]);
           }
           if (voiceModeRef.current === "call") {
             setCallLine(event.text ?? "");
@@ -187,9 +194,17 @@ export function useLiveThread(
             });
           }
           if (event.message_id && event.text) {
-            pushActivity({ kind: "reply", title: "Reply ready", detail: (event.text ?? "").slice(0, 90) });
+            pushActivity({
+              kind: "reply",
+              title: "Reply ready",
+              detail: (event.text ?? "").slice(0, 90),
+            });
             for (const file of event.attachments ?? []) {
-              pushActivity({ kind: "file", title: `Created ${file.filename ?? "a file"}`, detail: file.mime });
+              pushActivity({
+                kind: "file",
+                title: `Created ${file.filename ?? "a file"}`,
+                detail: file.mime,
+              });
             }
             setLive((prev) => [
               ...prev,
@@ -248,38 +263,49 @@ export function useLiveThread(
 
   useEffect(() => onChatEvent(handleEvent), [handleEvent]);
 
-  const send = useCallback(async (text: string, attachmentIds: string[] = [], imageUrl?: string | null) => {
-    // Sending while a reply is generating supersedes it server-side.
-    setError(null);
-    setStream("");
-    setActivity([]);
-    setBusy(true);
-    setLive((prev) => [
-      ...prev,
-      {
-        id: `local-${Date.now()}`,
-        role: "user",
-        content: text,
-        // The sent image shows on the user's bubble immediately, not after
-        // some later refetch.
-        attachments: imageUrl
-          ? [{ id: `local-img-${Date.now()}`, kind: "image", url: imageUrl, filename: null, mime: "" }]
-          : undefined,
-      },
-    ]);
-    try {
-      await sendChatMessage(chatRef.current, text, attachmentIds);
-    } catch (err) {
-      setBusy(false);
-      const message = err instanceof Error ? err.message : "Send failed";
-      setError(message);
-      toast(message);
-      // The message never left: put the text back in the input so a retry is
-      // one tap, not a retype.
-      setLive((prev) => prev.filter((m) => m.content !== text || m.role !== "user"));
-      onDraftRef.current?.(text);
-    }
-  }, []);
+  const send = useCallback(
+    async (text: string, attachmentIds: string[] = [], imageUrl?: string | null) => {
+      // Sending while a reply is generating supersedes it server-side.
+      setError(null);
+      setStream("");
+      setActivity([]);
+      setBusy(true);
+      setLive((prev) => [
+        ...prev,
+        {
+          id: `local-${Date.now()}`,
+          role: "user",
+          content: text,
+          // The sent image shows on the user's bubble immediately, not after
+          // some later refetch.
+          attachments: imageUrl
+            ? [
+                {
+                  id: `local-img-${Date.now()}`,
+                  kind: "image",
+                  url: imageUrl,
+                  filename: null,
+                  mime: "",
+                },
+              ]
+            : undefined,
+        },
+      ]);
+      try {
+        await sendChatMessage(chatRef.current, text, attachmentIds);
+      } catch (err) {
+        setBusy(false);
+        const message = err instanceof Error ? err.message : "Send failed";
+        setError(message);
+        toast(message);
+        // The message never left: put the text back in the input so a retry is
+        // one tap, not a retype.
+        setLive((prev) => prev.filter((m) => m.content !== text || m.role !== "user"));
+        onDraftRef.current?.(text);
+      }
+    },
+    []
+  );
 
   const edit = useCallback(async (messageId: string, text: string) => {
     // Claude-style edit: everything from the edited message onward is
@@ -355,6 +381,13 @@ export function useLiveThread(
     cancel,
     recording,
     toggleMic,
-    call: { open: callOpen, state: callState, line: callLine, start: startCall, end: endCall, sendNow: finishListening },
+    call: {
+      open: callOpen,
+      state: callState,
+      line: callLine,
+      start: startCall,
+      end: endCall,
+      sendNow: finishListening,
+    },
   };
 }

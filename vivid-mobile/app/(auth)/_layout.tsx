@@ -4,6 +4,12 @@ import { Stack } from "expo-router";
 // ambient light behind the glass.
 export default function AuthLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" }, animation: "slide_from_right" }} />
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: "transparent" },
+        animation: "slide_from_right",
+      }}
+    />
   );
 }

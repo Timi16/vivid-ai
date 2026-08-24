@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.routes.artifacts import router as artifacts_router
 from app.api.routes.attachments import router as attachments_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.chats import router as chats_router
@@ -12,5 +13,6 @@ api_router.include_router(health_router)
 api_router.include_router(auth_router)
 api_router.include_router(chats_router)
 api_router.include_router(attachments_router)
+api_router.include_router(artifacts_router)
 api_router.include_router(connectors_router)
 api_router.include_router(search_router)

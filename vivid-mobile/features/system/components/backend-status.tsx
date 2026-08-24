@@ -13,7 +13,11 @@ export function BackendStatus() {
   const state = isPending ? "checking" : isError ? "down" : data?.status === "ok" ? "up" : "down";
 
   const dot = { checking: theme.fg(0.3), up: theme.colors.up, down: theme.colors.down }[state];
-  const label = { checking: "Checking backend", up: "Backend connected", down: "Backend unreachable" }[state];
+  const label = {
+    checking: "Checking backend",
+    up: "Backend connected",
+    down: "Backend unreachable",
+  }[state];
 
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>

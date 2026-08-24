@@ -51,7 +51,9 @@ export function ReportDialog({ open, onOpenChange }: ReportDialogProps) {
               }
               onOpenChange(false);
               reset();
-              toast("Report submitted", { description: "Thanks. We'll take a look at this session." });
+              toast("Report submitted", {
+                description: "Thanks. We'll take a look at this session.",
+              });
             }}
           />
         </>
@@ -78,7 +80,12 @@ export function ReportDialog({ open, onOpenChange }: ReportDialogProps) {
           </AppText>
         ) : null}
         <Field label="Anything else? (optional)">
-          <Textarea rows={3} placeholder="Add any detail that would help us understand the problem." value={detail} onChangeText={setDetail} />
+          <Textarea
+            rows={3}
+            placeholder="Add any detail that would help us understand the problem."
+            value={detail}
+            onChangeText={setDetail}
+          />
         </Field>
       </View>
     </Modal>

@@ -23,7 +23,9 @@ export function searchEntries(entries: HistoryEntry[], query: string): HistoryEn
   const needle = query.trim().toLowerCase();
   if (!needle) return entries;
   return entries.filter((entry) =>
-    [entry.title, entry.preview, entry.space ?? ""].some((field) => field.toLowerCase().includes(needle))
+    [entry.title, entry.preview, entry.space ?? ""].some((field) =>
+      field.toLowerCase().includes(needle)
+    )
   );
 }
 

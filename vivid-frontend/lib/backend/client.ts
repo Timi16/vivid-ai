@@ -108,8 +108,22 @@ export interface ChatOut {
   id: string;
   title: string | null;
   language: string;
+  pinned: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ArtifactOut {
+  id: string;
+  kind: "image" | "file";
+  filename: string | null;
+  mime: string;
+  size_bytes: number;
+  url: string;
+  chat_id: string;
+  chat_title: string | null;
+  message_id: string | null;
+  created_at: string;
 }
 
 export interface AttachmentOut {
@@ -151,6 +165,9 @@ export const backend = {
   createChat: (language = "en") =>
     request<ChatOut>("/chats", { method: "POST", json: { language } }),
   deleteChat: (id: string) => request<null>(`/chats/${id}`, { method: "DELETE" }),
+  updateChat: (id: string, patch: { title?: string; pinned?: boolean }) =>
+    request<ChatOut>(`/chats/${id}`, { method: "PATCH", json: patch }),
+  artifacts: () => request<ArtifactOut[]>("/artifacts"),
   messages: (chatId: string) => request<MessageOut[]>(`/chats/${chatId}/messages`),
   // Synthesizes on first call, then returns the cached audio attachment.
   speakMessage: (chatId: string, messageId: string) =>

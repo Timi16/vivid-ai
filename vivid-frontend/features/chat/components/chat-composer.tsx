@@ -8,13 +8,18 @@ import {
   MicIcon,
   WaveformIcon,
 } from "@/components/ui/icons";
+import { Menu, MenuItem } from "@/components/ui/menu";
+import { LANGUAGES, languageLabel } from "@/features/chat/lib/languages";
 import { cn } from "@/lib/utils";
 
 interface ChatComposerProps {
   value: string;
   onValueChange: (value: string) => void;
   onSubmit: (value: string) => void;
-  model?: string;
+  // The chat's language. With onLanguageChange it is a picker (new chats);
+  // without, a label (a chat's language is fixed once it exists).
+  language?: string;
+  onLanguageChange?: (code: string) => void;
   className?: string;
   // Live-integration hooks. All optional so the launcher can render the same
   // composer before a thread exists.
@@ -35,7 +40,8 @@ export function ChatComposer({
   value,
   onValueChange,
   onSubmit,
-  model = "Vivid AI",
+  language = "en",
+  onLanguageChange,
   className,
   onAttachFile,
   attachment,
@@ -149,10 +155,36 @@ export function ChatComposer({
         ) : null}
 
         <div className="ml-auto flex items-center gap-1.5">
-          <span className="text-fg/55 flex h-8 items-center gap-1 rounded-full px-2.5 text-[12.5px] font-medium">
-            {model}
-            <ChevronDownIcon size={14} className="text-fg/40" />
-          </span>
+          {onLanguageChange ? (
+            <Menu
+              side="top"
+              align="end"
+              trigger={
+                <button
+                  type="button"
+                  aria-label="Chat language"
+                  className="hover:vd-glass-control text-fg/60 hover:text-fg flex h-8 cursor-pointer items-center gap-1 rounded-full px-2.5 text-[12.5px] font-medium transition-colors"
+                >
+                  {languageLabel(language)}
+                  <ChevronDownIcon size={14} className="text-fg/40" />
+                </button>
+              }
+            >
+              {LANGUAGES.map((option) => (
+                <MenuItem key={option.code} onClick={() => onLanguageChange(option.code)}>
+                  {option.label}
+                  {option.code === language ? <span className="text-fg/40 ml-auto text-[11px]">✓</span> : null}
+                </MenuItem>
+              ))}
+            </Menu>
+          ) : (
+            <span
+              title="Chat language"
+              className="text-fg/45 flex h-8 items-center rounded-full px-2.5 text-[12.5px] font-medium"
+            >
+              {languageLabel(language)}
+            </span>
+          )}
 
           {onStartCall ? (
             <ComposerButton label="Start a voice conversation" onClick={onStartCall}>

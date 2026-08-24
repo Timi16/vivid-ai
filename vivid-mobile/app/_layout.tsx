@@ -29,7 +29,12 @@ void SplashScreen.preventAutoHideAsync();
 const queryClient = createQueryClient();
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({ Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold });
+  const [fontsLoaded] = useFonts({
+    Geist_400Regular,
+    Geist_500Medium,
+    Geist_600SemiBold,
+    Geist_700Bold,
+  });
   const [boot, setBoot] = useState<{ theme: ThemePreference } | null>(null);
 
   useEffect(() => {
@@ -65,7 +70,13 @@ function RootNavigator() {
     <>
       <AmbientBackdrop />
       <StatusBar style={theme.mode === "dark" ? "light" : "dark"} />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" }, animation: "fade" }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: "transparent" },
+          animation: "fade",
+        }}
+      >
         {/* The guard is the auth gate: no token, no app. Signing out flips
             it and the router swaps the shell for the auth screens. */}
         <Stack.Protected guard={signedIn}>

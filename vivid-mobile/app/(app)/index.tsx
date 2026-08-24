@@ -1,13 +1,14 @@
 import { Screen } from "@/components/layout/screen";
 import { ChatLauncher } from "@/features/chat";
-import { BackendStatus } from "@/features/system";
+import { useChats } from "@/features/history";
 
-// The route composes the two slices. Neither imports the other: chat takes
-// the status indicator as a slot.
+// The route composes the two slices: history knows whether this is the
+// user's first visit, chat renders the welcome accordingly.
 export default function HomeScreen() {
+  const { data: chats } = useChats();
   return (
     <Screen center>
-      <ChatLauncher statusSlot={<BackendStatus />} />
+      <ChatLauncher isFirstRun={chats !== undefined && chats.length === 0} />
     </Screen>
   );
 }

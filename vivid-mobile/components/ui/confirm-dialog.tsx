@@ -36,7 +36,13 @@ export function ConfirmDialog({
       dismissable={false}
       footer={
         <>
-          <Button variant="ghost" size="sm" label={cancelLabel} disabled={loading} onPress={() => onOpenChange(false)} />
+          <Button
+            variant="ghost"
+            size="sm"
+            label={cancelLabel}
+            disabled={loading}
+            onPress={() => onOpenChange(false)}
+          />
           <Button
             size="sm"
             variant={tone === "danger" ? "danger" : "primary"}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PanResponder, View, type GestureResponderEvent } from "react-native";
+import { View, type GestureResponderEvent } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Glass } from "@/components/ui/glass";
@@ -49,24 +49,19 @@ export function MediaTransport({ duration, visual }: MediaTransportProps) {
   // than state so the responder does not need rebuilding on every layout.
   const trackWidth = useRef(0);
   const durationRef = useRef(duration);
-  durationRef.current = duration;
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
 
+  // Stands in for the web's range input: a tap seeks, a drag scrubs. Wired
+  // through the view's own responder props, so the refs are only read at
+  // gesture time.
   const seekTo = (event: GestureResponderEvent) => {
     const width = trackWidth.current;
     if (width <= 0) return;
     const ratio = Math.min(1, Math.max(0, event.nativeEvent.locationX / width));
     setPosition(Math.round(ratio * durationRef.current));
   };
-
-  // Stands in for the web's range input: a tap seeks, a drag scrubs.
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: seekTo,
-      onPanResponderMove: seekTo,
-    })
-  ).current;
 
   const pct = duration === 0 ? 0 : (position / duration) * 100;
 
@@ -97,10 +92,18 @@ export function MediaTransport({ duration, visual }: MediaTransportProps) {
         </AppText>
 
         <View
-          {...responder.panHandlers}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={seekTo}
+          onResponderMove={seekTo}
           accessibilityRole="adjustable"
           accessibilityLabel="Seek"
-          accessibilityValue={{ min: 0, max: duration, now: position, text: formatDuration(position) }}
+          accessibilityValue={{
+            min: 0,
+            max: duration,
+            now: position,
+            text: formatDuration(position),
+          }}
           accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
           onAccessibilityAction={(event) => {
             const step = event.nativeEvent.actionName === "increment" ? 1 : -1;

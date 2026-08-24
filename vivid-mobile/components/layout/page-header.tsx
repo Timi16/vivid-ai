@@ -12,7 +12,14 @@ interface PageHeaderProps {
 // The title block every inner page uses, so headings keep one rhythm.
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+      }}
+    >
       <View style={{ flex: 1, gap: 4 }}>
         <AppText display size={24} lineHeight={28}>
           {title}
@@ -23,7 +30,9 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
           </AppText>
         ) : null}
       </View>
-      {actions ? <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>{actions}</View> : null}
+      {actions ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>{actions}</View>
+      ) : null}
     </View>
   );
 }

@@ -8,17 +8,18 @@ import { LogOutIcon, SettingsIcon, SparkIcon } from "@/components/ui/icons";
 import { Menu, MenuItem, MenuSeparator } from "@/components/ui/menu";
 import { AppText } from "@/components/ui/text";
 import { useTheme } from "@/hooks/use-theme";
+import { stopPlayback } from "@/lib/backend/audio";
 import { setTokens } from "@/lib/backend/client";
 import { closeChatSocket } from "@/lib/backend/ws";
-import { stopPlayback } from "@/lib/backend/audio";
 
 interface AccountMenuProps {
   name: string;
+  avatarUrl?: string | null;
   plan: string;
   onNavigate?: () => void;
 }
 
-export function AccountMenu({ name, plan, onNavigate }: AccountMenuProps) {
+export function AccountMenu({ name, avatarUrl, plan, onNavigate }: AccountMenuProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -45,7 +46,7 @@ export function AccountMenu({ name, plan, onNavigate }: AccountMenuProps) {
           backgroundColor: pressed ? theme.fg(0.08) : "transparent",
         })}
       >
-        <Avatar name={name} size="sm" />
+        <Avatar name={name} src={avatarUrl} size="sm" />
         <View style={{ flex: 1 }}>
           <AppText size={13} weight="semibold" tone={0.85} numberOfLines={1}>
             {name}
@@ -57,8 +58,16 @@ export function AccountMenu({ name, plan, onNavigate }: AccountMenuProps) {
       </Pressable>
 
       <Menu open={menuOpen} onOpenChange={setMenuOpen} title={name}>
-        <MenuItem label="Settings" icon={<SettingsIcon size={16} color={theme.fg(0.8)} />} onPress={() => go("/settings")} />
-        <MenuItem label="Upgrade plan" icon={<SparkIcon size={16} color={theme.fg(0.8)} />} onPress={() => go("/upgrade")} />
+        <MenuItem
+          label="Settings"
+          icon={<SettingsIcon size={16} color={theme.fg(0.8)} />}
+          onPress={() => go("/settings")}
+        />
+        <MenuItem
+          label="Upgrade plan"
+          icon={<SparkIcon size={16} color={theme.fg(0.8)} />}
+          onPress={() => go("/upgrade")}
+        />
         <MenuSeparator />
         <MenuItem
           label="Sign out"

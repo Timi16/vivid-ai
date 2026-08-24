@@ -16,20 +16,21 @@ import { backend } from "@/lib/backend/client";
 import { toast } from "@/lib/toast";
 
 interface ChatLauncherProps {
-  // Rendered under the composer. The route passes it, so this feature does
-  // not need to know what a backend status indicator is.
-  statusSlot?: React.ReactNode;
+  // True until the user has a single chat. The route knows (history does);
+  // the launcher only decides how to welcome them.
+  isFirstRun?: boolean;
 }
 
 // The empty state: wordmark, composer, starter prompts. Submitting creates a
 // chat on the backend, stashes the prompt, and lands in the thread, which
 // sends it the moment it mounts.
-export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
+export function ChatLauncher({ isFirstRun = false }: ChatLauncherProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const [value, setValue] = useState("");
   const [seed, setSeed] = useState(1);
   const [creating, setCreating] = useState(false);
+  const [language, setLanguage] = useState("en");
   const [uploading, setUploading] = useState(false);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
 
@@ -55,7 +56,7 @@ export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
     if (creating) return;
     setCreating(true);
     try {
-      const chat = await backend.createChat("en");
+      const chat = await backend.createChat(language);
       stashPendingPrompt(chat.id, {
         text: prompt,
         attachmentId: pendingImage?.id ?? null,
@@ -77,7 +78,7 @@ export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
     if (creating) return;
     setCreating(true);
     try {
-      const chat = await backend.createChat("en");
+      const chat = await backend.createChat(language);
       stashPendingCall(chat.id);
       router.push({ pathname: "/thread/[id]", params: { id: chat.id } });
     } catch (err) {
@@ -89,11 +90,16 @@ export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
 
   return (
     <View style={{ width: "100%", maxWidth: 720, alignSelf: "center", alignItems: "center" }}>
-      <AppText display size={38} lineHeight={42} style={{ marginBottom: 32 }}>
+      <AppText display size={38} lineHeight={42} style={{ marginBottom: 12 }}>
         Vivid{" "}
         <AppText size={38} tone={0.45}>
           AI
         </AppText>
+      </AppText>
+      <AppText size={14} tone={0.45} align="center" style={{ marginBottom: 32, maxWidth: 340 }}>
+        {isFirstRun
+          ? "Ask anything, in English, Pidgin, Yorùbá or Igbo. Or tap the waveform and just talk."
+          : "What can I help with?"}
       </AppText>
 
       <View style={{ width: "100%" }}>
@@ -101,6 +107,8 @@ export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
           value={value}
           onValueChange={setValue}
           onSubmit={launch}
+          language={language}
+          onLanguageChange={setLanguage}
           busy={creating}
           onStartCall={launchCall}
           onAttachImage={attachImage}
@@ -110,16 +118,31 @@ export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
         />
       </View>
 
-      <View style={{ marginTop: 16, flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8 }}>
+      <View
+        style={{
+          marginTop: 16,
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+        }}
+      >
         {visible.map((suggestion) => (
-          <Chip key={suggestion.label} label={suggestion.label} onPress={() => setValue(suggestion.prompt)} />
+          <Chip
+            key={suggestion.label}
+            label={suggestion.label}
+            onPress={() => setValue(suggestion.prompt)}
+          />
         ))}
-        <IconButton label="Show different prompts" size={32} onPress={() => setSeed((prev) => prev + 1)}>
+        <IconButton
+          label="Show different prompts"
+          size={32}
+          onPress={() => setSeed((prev) => prev + 1)}
+        >
           <ShuffleIcon size={16} color={theme.fg(0.45)} />
         </IconButton>
       </View>
-
-      {statusSlot ? <View style={{ marginTop: 40 }}>{statusSlot}</View> : null}
     </View>
   );
 }

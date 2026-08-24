@@ -40,7 +40,10 @@ export function ThemeProvider({ initialPreference, children }: ThemeProviderProp
     [preference, scheme]
   );
 
-  const value = useMemo(() => ({ theme, preference, setPreference }), [theme, preference, setPreference]);
+  const value = useMemo(
+    () => ({ theme, preference, setPreference }),
+    [theme, preference, setPreference]
+  );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

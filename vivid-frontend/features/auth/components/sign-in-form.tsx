@@ -34,23 +34,26 @@ export function SignInForm() {
     const returned = readGoogleReturn();
     if (!returned) return;
     resumedRef.current = true;
-    if ("error" in returned) {
-      setError(`Google sign-in failed: ${returned.error}`);
-      return;
-    }
-    setFinishingGoogle(true);
-    setSubmitting(true);
-    backend
-      .decaneLogin(returned.jwt, returned.profile)
-      .then((tokens) => {
-        setTokens(tokens);
-        router.push("/");
-      })
-      .catch((err: unknown) => {
-        setSubmitting(false);
-        setFinishingGoogle(false);
-        setError(err instanceof Error ? err.message : "Google sign-in failed");
-      });
+    // Deferred a tick so the first render settles before state moves.
+    queueMicrotask(() => {
+      if ("error" in returned) {
+        setError(`Google sign-in failed: ${returned.error}`);
+        return;
+      }
+      setFinishingGoogle(true);
+      setSubmitting(true);
+      backend
+        .decaneLogin(returned.jwt, returned.profile)
+        .then((tokens) => {
+          setTokens(tokens);
+          router.push("/");
+        })
+        .catch((err: unknown) => {
+          setSubmitting(false);
+          setFinishingGoogle(false);
+          setError(err instanceof Error ? err.message : "Google sign-in failed");
+        });
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

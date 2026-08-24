@@ -7,7 +7,14 @@ import { Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { toast } from "@/lib/toast";
 
-const TAGS = ["Not accurate", "Missing detail", "Wrong sources", "Too long", "Too short", "Off topic"];
+const TAGS = [
+  "Not accurate",
+  "Missing detail",
+  "Wrong sources",
+  "Too long",
+  "Too short",
+  "Off topic",
+];
 
 interface FeedbackDialogProps {
   open: boolean;
@@ -59,7 +66,11 @@ export function FeedbackDialog({ open, onOpenChange, rating }: FeedbackDialogPro
                 size="sm"
                 label={tag}
                 selected={tags.includes(tag)}
-                onPress={() => setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))}
+                onPress={() =>
+                  setTags((prev) =>
+                    prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+                  )
+                }
               />
             ))}
           </View>
@@ -67,7 +78,9 @@ export function FeedbackDialog({ open, onOpenChange, rating }: FeedbackDialogPro
         <Textarea
           rows={4}
           accessibilityLabel="Feedback"
-          placeholder={positive ? "What made this answer useful?" : "What would a good answer have said?"}
+          placeholder={
+            positive ? "What made this answer useful?" : "What would a good answer have said?"
+          }
           value={detail}
           onChangeText={setDetail}
         />

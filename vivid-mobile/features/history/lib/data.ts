@@ -7,4 +7,5 @@ export interface HistoryEntry {
   kind: ThreadKind;
   updatedAt: string;
   space?: string;
+  pinned?: boolean;
 }

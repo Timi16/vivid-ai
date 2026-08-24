@@ -56,7 +56,12 @@ export function ArtifactsView() {
         <Glass
           tier="card"
           sheen
-          style={{ marginTop: 24, alignItems: "center", paddingHorizontal: 20, paddingVertical: 64 }}
+          style={{
+            marginTop: 24,
+            alignItems: "center",
+            paddingHorizontal: 20,
+            paddingVertical: 64,
+          }}
         >
           <View style={{ maxWidth: 320, alignItems: "center", gap: 6 }}>
             <AppText size={14} weight="semibold" tone={0.85} align="center">
@@ -141,7 +146,10 @@ export function ArtifactsView() {
                 duration={open.duration ?? 0}
                 visual={
                   open.kind === "video" ? (
-                    <ArtifactSurface artifact={open} style={{ width: "100%", aspectRatio: 16 / 9 }} />
+                    <ArtifactSurface
+                      artifact={open}
+                      style={{ width: "100%", aspectRatio: 16 / 9 }}
+                    />
                   ) : (
                     <ArtifactSurface artifact={open} style={{ width: "100%", height: 96 }} />
                   )
@@ -150,10 +158,22 @@ export function ArtifactsView() {
             )}
 
             <Glass tier="well" radius={16} style={{ padding: 16 }}>
-              <AppText size={11.5} weight="semibold" tone={0.4} uppercase style={{ letterSpacing: 0.6 }}>
+              <AppText
+                size={11.5}
+                weight="semibold"
+                tone={0.4}
+                uppercase
+                style={{ letterSpacing: 0.6 }}
+              >
                 Prompt
               </AppText>
-              <AppText size={13} weight="regular" tone={0.7} lineHeight={20} style={{ marginTop: 6 }}>
+              <AppText
+                size={13}
+                weight="regular"
+                tone={0.7}
+                lineHeight={20}
+                style={{ marginTop: 6 }}
+              >
                 {open.prompt}
               </AppText>
             </Glass>

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { buttonClasses } from "@/components/ui/button-classes";
 import { SettingsView } from "@/features/settings";
+import { BackendStatus } from "@/features/system";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -18,6 +19,7 @@ export default function SettingsPage() {
           Upgrade
         </Link>
       }
+      systemSlot={<BackendStatus />}
     />
   );
 }

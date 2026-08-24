@@ -7,16 +7,16 @@ import { MailIcon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { AppText } from "@/components/ui/text";
 import { AuthCard } from "@/features/auth/components/auth-card";
-import { PinPrompt } from "@/features/auth/components/pin-prompt";
 import { ProviderButton } from "@/features/auth/components/provider-buttons";
-import { isGoogleSignInConfigured, signInWithGoogle } from "@/features/auth/lib/decane";
 import { validateEmail, validatePassword } from "@/features/auth/lib/validation";
 import { useTheme } from "@/hooks/use-theme";
 import { backend, setTokens } from "@/lib/backend/client";
+import { decaneConfigured, signInWithGoogle } from "@/lib/backend/decane";
 
 // Email + password against the live backend. One form serves both directions:
-// sign in by default, flip to create an account. Google runs through Decane's
-// in-app browser sheet and lands on the same session.
+// sign in by default, flip to create an account. Google runs through the
+// system auth sheet and lands on the same session: identity only, no wallet,
+// so no passkey prompt.
 //
 // There is no navigation on success: setting the tokens flips the root
 // stack's guard and the app shell takes over.
@@ -27,23 +27,33 @@ export function SignInForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [googleBusy, setGoogleBusy] = useState(false);
+  const [finishingGoogle, setFinishingGoogle] = useState(false);
 
   async function googleSignIn() {
-    if (!isGoogleSignInConfigured()) {
-      setError("Google sign-in isn't configured yet (set EXPO_PUBLIC_DECANE_APP_ID and EXPO_PUBLIC_DECANE_API_KEY).");
+    if (!decaneConfigured) {
+      setError(
+        "Google sign-in isn't configured yet (set EXPO_PUBLIC_DECANE_APP_ID and EXPO_PUBLIC_DECANE_API_KEY)."
+      );
       return;
     }
     setError(null);
-    setGoogleBusy(true);
+    setSubmitting(true);
     try {
-      const accessToken = await signInWithGoogle();
-      const tokens = await backend.decaneLogin(accessToken);
+      const returned = await signInWithGoogle();
+      // A dismissed sheet is not an error; the form is simply back.
+      if (!returned) return;
+      if ("error" in returned) {
+        setError(`Google sign-in failed: ${returned.error}`);
+        return;
+      }
+      setFinishingGoogle(true);
+      const tokens = await backend.decaneLogin(returned.jwt, returned.profile);
       setTokens(tokens);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed");
     } finally {
-      setGoogleBusy(false);
+      setSubmitting(false);
+      setFinishingGoogle(false);
     }
   }
 
@@ -73,19 +83,24 @@ export function SignInForm() {
       subtitle="Ask anything, and see it come to life."
       footer={
         <AppText size={12.5} weight="regular" tone={0.45} align="center">
-          By continuing you agree to the <AppText size={12.5} tone={0.7}>Terms</AppText> and{" "}
-          <AppText size={12.5} tone={0.7}>Privacy Policy</AppText>.
+          By continuing you agree to the{" "}
+          <AppText size={12.5} tone={0.7}>
+            Terms
+          </AppText>{" "}
+          and{" "}
+          <AppText size={12.5} tone={0.7}>
+            Privacy Policy
+          </AppText>
+          .
         </AppText>
       }
     >
-      <PinPrompt />
-
-      {googleBusy ? (
+      {finishingGoogle ? (
         <AppText size={13} tone={0.6} align="center" style={{ marginBottom: 16 }}>
           Finishing Google sign-in…
         </AppText>
       ) : null}
-      <ProviderButton provider="google" onPress={googleSignIn} disabled={submitting || googleBusy} />
+      <ProviderButton provider="google" onPress={googleSignIn} disabled={submitting} />
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 20 }}>
         <View style={{ flex: 1, height: 1, backgroundColor: theme.fg(0.1) }} />
@@ -134,8 +149,8 @@ export function SignInForm() {
 
         <Button
           label={mode === "login" ? "Sign in" : "Create account"}
-          loading={submitting}
-          disabled={googleBusy}
+          loading={submitting && !finishingGoogle}
+          disabled={submitting}
           fullWidth
           onPress={() => void submit()}
         />

@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Modal, Pressable, StyleSheet, View } from "react-native";
 
 import { Glass } from "@/components/ui/glass";
 import { AppText } from "@/components/ui/text";
-import { useTheme } from "@/hooks/use-theme";
 import type { CallState } from "@/features/chat/hooks/use-live-thread";
+import { useTheme } from "@/hooks/use-theme";
 
 const STATE_LABEL: Record<CallState, string> = {
   idle: "Connecting…",
@@ -30,7 +30,9 @@ export function CallOverlay({
   onEnd: () => void;
 }) {
   const { theme } = useTheme();
-  const pulse = useRef(new Animated.Value(1)).current;
+  // Created once per mount; a ref would be read during render, which the
+  // hooks lint forbids.
+  const [pulse] = useState(() => new Animated.Value(1));
 
   // A slow breathing pulse while the mic is open or the reply is playing.
   useEffect(() => {
@@ -49,9 +51,35 @@ export function CallOverlay({
   }, [open, state, pulse]);
 
   return (
-    <Modal visible={open} transparent animationType="fade" statusBarTranslucent onRequestClose={onEnd}>
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", padding: 24 }]}>
-        <Glass tier="card" sheen style={{ minWidth: 300, alignItems: "center", gap: 12, paddingHorizontal: 40, paddingVertical: 40 }}>
+    <Modal
+      visible={open}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onEnd}
+    >
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: "rgba(0,0,0,0.6)",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+          },
+        ]}
+      >
+        <Glass
+          tier="card"
+          sheen
+          style={{
+            minWidth: 300,
+            alignItems: "center",
+            gap: 12,
+            paddingHorizontal: 40,
+            paddingVertical: 40,
+          }}
+        >
           <Animated.View
             style={{
               width: 96,
@@ -83,7 +111,11 @@ export function CallOverlay({
           ) : null}
           <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", gap: 12 }}>
             {state === "listening" ? (
-              <Pressable accessibilityRole="button" onPress={onSendNow} style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onSendNow}
+                style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
+              >
                 <Glass tier="bright" sheen style={{ paddingHorizontal: 24, paddingVertical: 10 }}>
                   <AppText size={14} weight="semibold" color={theme.colors.ink}>
                     Send now

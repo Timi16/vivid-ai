@@ -92,7 +92,9 @@ export function closeChatSocket() {
 
 export async function sendChatMessage(chatId: string, text: string, attachmentIds: string[] = []) {
   const ws = await chatSocket();
-  ws.send(JSON.stringify({ type: "message", chat_id: chatId, text, attachment_ids: attachmentIds }));
+  ws.send(
+    JSON.stringify({ type: "message", chat_id: chatId, text, attachment_ids: attachmentIds })
+  );
 }
 
 export async function sendEdit(chatId: string, messageId: string, text: string) {
@@ -127,6 +129,8 @@ export function sendAudioChunk(buffer: ArrayBuffer) {
 
 export function endAudioTurn(chatId: string, transcribeOnly = false) {
   if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: "audio_end", chat_id: chatId, transcribe_only: transcribeOnly }));
+    socket.send(
+      JSON.stringify({ type: "audio_end", chat_id: chatId, transcribe_only: transcribeOnly })
+    );
   }
 }

@@ -573,3 +573,25 @@ body {
 }
 .vd-md h1, .vd-md h2, .vd-md h3 { margin: 14px 0 6px; font-weight: 600; font-size: 16px; }
 .vd-md a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* Fenced code blocks inside assistant markdown. */
+.vd-code-block {
+  background: color-mix(in oklab, var(--color-fg) 5%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-fg) 10%, transparent);
+}
+.vd-md .vd-code-block pre {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

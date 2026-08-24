@@ -27,6 +27,8 @@ async def init_db() -> None:
                        "profile_email VARCHAR(320)"):
             await conn.execute(text(
                 f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {column}"))
+        await conn.execute(text(
+            "ALTER TABLE chats ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE"))
 
     async with async_session() as db:
         # Prompts are product config and deploy with the backend: upsert so a

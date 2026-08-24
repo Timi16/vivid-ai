@@ -11,6 +11,8 @@ import { ChatComposer } from "@/features/chat/components/chat-composer";
 import { AnswerActions } from "@/features/chat/components/answer-actions";
 import { AddToSpaceDialog } from "@/features/chat/components/add-to-space-dialog";
 import { ActivityTrail } from "@/features/chat/components/activity-trail";
+import { ArtifactPanel } from "@/features/chat/components/artifact-panel";
+import { ThinkingLine } from "@/features/chat/components/thinking-line";
 import { CallOverlay } from "@/features/chat/components/call-overlay";
 import { ExportDialog } from "@/features/chat/components/export-dialog";
 import { FeedbackDialog } from "@/features/chat/components/feedback-dialog";
@@ -23,7 +25,9 @@ import { useLiveThread } from "@/features/chat/hooks/use-live-thread";
 import { useSession } from "@/features/chat/hooks/use-session";
 import { backend } from "@/lib/backend/client";
 import { playUrl, playWavBase64, stopPlayback } from "@/lib/backend/audio";
+import type { Artifact } from "@/features/chat/lib/artifacts";
 import type { LiveMessage } from "@/features/chat/lib/types";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 
 interface ThreadViewProps {
   sessionId: string;
@@ -62,6 +66,10 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
+  // Something the assistant made, opened beside the chat (or over it on a
+  // phone).
+  const [artifact, setArtifact] = useState<Artifact | null>(null);
+  const isMobile = useIsMobile();
 
   async function saveEdit() {
     if (!editingId || !editingText.trim()) return;
@@ -255,9 +263,11 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
   }
 
   const heading = title ?? session.title;
+  const panelOpen = artifact !== null && !isMobile;
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex h-full min-h-full">
+    <div className="flex min-h-full min-w-0 flex-1 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-[760px] flex-1 px-5 pt-8 pb-6">
         <h1 className="ws-display text-fg text-[24px] leading-tight">{heading}</h1>
 
@@ -352,18 +362,34 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
                     </button>
                   ))}
 
-                <Markdown>{message.content}</Markdown>
+                <Markdown onOpenArtifact={setArtifact}>{message.content}</Markdown>
 
                 {message.attachments?.filter((a) => a.kind === "file" && a.url).map((a) => (
-                  <a
-                    key={a.id}
-                    href={a.url ?? "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="vd-glass-control text-fg/80 hover:text-fg w-fit rounded-xl px-3.5 py-2 text-[13px] font-medium"
-                  >
-                    📄 {a.filename ?? "file"}
-                  </a>
+                  <div key={a.id} className="vd-glass-control flex w-fit items-center gap-3 rounded-xl px-3.5 py-2 text-[13px]">
+                    <span className="text-fg/80 font-medium">📄 {a.filename ?? "file"}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setArtifact({
+                          kind: "file",
+                          title: a.filename ?? "file",
+                          url: a.url ?? "",
+                          mime: a.mime,
+                        })
+                      }
+                      className="text-fg/55 hover:text-fg cursor-pointer text-[12px] font-semibold"
+                    >
+                      Open
+                    </button>
+                    <a
+                      href={a.url ?? "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-fg/55 hover:text-fg text-[12px] font-semibold"
+                    >
+                      Download
+                    </a>
+                  </div>
                 ))}
 
                 <div className="flex items-center gap-3">
@@ -402,9 +428,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
           <ActivityTrail steps={thread.activity} busy={thread.busy} />
 
           {thread.stream ? <Markdown>{thread.stream}</Markdown> : null}
-          {thread.busy && !thread.stream && !thread.activity.length ? (
-            <p className="text-fg/40 text-[13.5px]">Thinking…</p>
-          ) : null}
+          {thread.busy && !thread.stream && !thread.activity.length ? <ThinkingLine /> : null}
           {thread.error ? (
             <button
               type="button"
@@ -426,6 +450,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
             value={prompt}
             onValueChange={updatePrompt}
             onSubmit={submit}
+            language={session.language}
             busy={thread.busy}
             onCancel={thread.cancel}
             onAttachFile={attachFile}
@@ -439,6 +464,31 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
           />
         </div>
       </div>
+
+    </div>
+
+      {panelOpen && artifact ? (
+        <ArtifactPanel
+          artifact={artifact}
+          onClose={() => setArtifact(null)}
+          className="m-4 ml-0 w-[46%] max-w-[720px] min-w-[360px]"
+        />
+      ) : null}
+
+      <Modal
+        open={artifact !== null && isMobile}
+        onOpenChange={(open) => {
+          if (!open) setArtifact(null);
+        }}
+        title={artifact?.title ?? "Artifact"}
+        hideTitle
+        size="xl"
+        className="h-[85vh] p-0"
+      >
+        {artifact ? (
+          <ArtifactPanel artifact={artifact} onClose={() => setArtifact(null)} className="h-full" />
+        ) : null}
+      </Modal>
 
       <CallOverlay
         open={thread.call.open}

@@ -19,6 +19,7 @@ import { AppText } from "@/components/ui/text";
 import { ActivityTrail } from "@/features/chat/components/activity-trail";
 import { AddToSpaceDialog } from "@/features/chat/components/add-to-space-dialog";
 import { AnswerActions } from "@/features/chat/components/answer-actions";
+import { ArtifactPanel } from "@/features/chat/components/artifact-panel";
 import { CallOverlay } from "@/features/chat/components/call-overlay";
 import { ChatComposer } from "@/features/chat/components/chat-composer";
 import { ExportDialog } from "@/features/chat/components/export-dialog";
@@ -28,14 +29,16 @@ import { AssistantBubble, UserBubble } from "@/features/chat/components/message-
 import { RenameDialog } from "@/features/chat/components/rename-dialog";
 import { ReportDialog } from "@/features/chat/components/report-dialog";
 import { ShareDialog } from "@/features/chat/components/share-dialog";
+import { ThinkingLine } from "@/features/chat/components/thinking-line";
 import { useLiveThread } from "@/features/chat/hooks/use-live-thread";
 import { useSession } from "@/features/chat/hooks/use-session";
+import type { Artifact } from "@/features/chat/lib/artifacts";
 import { takePendingCall, takePendingPrompt } from "@/features/chat/lib/handoff";
 import { pickImage } from "@/features/chat/lib/pick-image";
 import type { LiveMessage, PendingImage } from "@/features/chat/lib/types";
 import { useTheme } from "@/hooks/use-theme";
-import { backend } from "@/lib/backend/client";
 import { playUrl, playWavBase64, stopPlayback } from "@/lib/backend/audio";
+import { backend } from "@/lib/backend/client";
 import { preferences } from "@/lib/storage";
 import { toast } from "@/lib/toast";
 
@@ -84,7 +87,11 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
   const [editingText, setEditingText] = useState("");
   const [ratings, setRatings] = useState<Record<string, "up" | "down">>({});
   const [speakingId, setSpeakingId] = useState<string | null>(null);
-  const [viewerImage, setViewerImage] = useState<{ url: string; filename: string | null } | null>(null);
+  const [viewerImage, setViewerImage] = useState<{ url: string; filename: string | null } | null>(
+    null
+  );
+  // Something the assistant made, opened over the chat.
+  const [artifact, setArtifact] = useState<Artifact | null>(null);
 
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -104,7 +111,11 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
     const pending = takePendingPrompt(sessionId);
     if (pending) {
       sentPendingRef.current = true;
-      void thread.send(pending.text, pending.attachmentId ? [pending.attachmentId] : [], pending.imageUrl);
+      void thread.send(
+        pending.text,
+        pending.attachmentId ? [pending.attachmentId] : [],
+        pending.imageUrl
+      );
       return;
     }
     if (takePendingCall(sessionId)) {
@@ -228,7 +239,10 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
   const heading = title ?? session.title;
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={{ flex: 1 }}
+    >
       <ScrollView
         ref={scrollRef}
         onScroll={onScroll}
@@ -265,6 +279,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
                 speaking={speakingId === message.id}
                 onPlay={() => void playReply(message)}
                 onViewImage={setViewerImage}
+                onOpenArtifact={setArtifact}
                 actions={
                   <AnswerActions
                     answer={message.content}
@@ -288,11 +303,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
           <ActivityTrail steps={thread.activity} busy={thread.busy} />
 
           {thread.stream ? <Markdown>{thread.stream}</Markdown> : null}
-          {thread.busy && !thread.stream && !thread.activity.length ? (
-            <AppText size={13.5} tone={0.4}>
-              Thinking…
-            </AppText>
-          ) : null}
+          {thread.busy && !thread.stream && !thread.activity.length ? <ThinkingLine /> : null}
           {thread.error ? (
             <Pressable accessibilityRole="button" onPress={thread.dismissError}>
               <AppText size={13.5} color={theme.colors.down}>
@@ -310,6 +321,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
           value={prompt}
           onValueChange={updatePrompt}
           onSubmit={submit}
+          language={session.language}
           busy={thread.busy}
           onCancel={thread.cancel}
           onAttachImage={attachImage}
@@ -323,7 +335,15 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
         />
       </View>
 
-      <CallOverlay open={thread.call.open} state={thread.call.state} line={thread.call.line} onSendNow={thread.call.sendNow} onEnd={thread.call.end} />
+      <ArtifactPanel artifact={artifact} onClose={() => setArtifact(null)} />
+
+      <CallOverlay
+        open={thread.call.open}
+        state={thread.call.state}
+        line={thread.call.line}
+        onSendNow={thread.call.sendNow}
+        onEnd={thread.call.end}
+      />
 
       <Modal
         open={viewerImage !== null}
@@ -335,13 +355,23 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
         bare
       >
         {viewerImage ? (
-          <Image source={{ uri: viewerImage.url }} accessibilityLabel={viewerImage.filename ?? ""} style={{ width: "100%", aspectRatio: 1, borderRadius: 14 }} resizeMode="contain" />
+          <Image
+            source={{ uri: viewerImage.url }}
+            accessibilityLabel={viewerImage.filename ?? ""}
+            style={{ width: "100%", aspectRatio: 1, borderRadius: 14 }}
+            resizeMode="contain"
+          />
         ) : null}
       </Modal>
 
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} sessionId={session.id} />
       <ExportDialog open={exportOpen} onOpenChange={setExportOpen} sessionTitle={heading} />
-      <RenameDialog open={renameOpen} onOpenChange={setRenameOpen} currentTitle={heading} onRename={setTitle} />
+      <RenameDialog
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        currentTitle={heading}
+        onRename={setTitle}
+      />
       <AddToSpaceDialog open={spaceOpen} onOpenChange={setSpaceOpen} spaces={spaces} />
       <ReportDialog open={reportOpen} onOpenChange={setReportOpen} />
       <FeedbackDialog

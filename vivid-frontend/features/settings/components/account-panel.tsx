@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { LogOutIcon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
-import { useUpdateName } from "@/features/auth/hooks/use-me";
+import { useUpdateName } from "@/hooks/use-me";
 import { SettingGroup, SettingRow } from "@/features/settings/components/setting-row";
 
 interface AccountPanelProps {

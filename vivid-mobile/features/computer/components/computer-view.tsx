@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Animated, View } from "react-native";
 
 import { PageHeader } from "@/components/layout/page-header";
@@ -10,7 +10,12 @@ import { AppText } from "@/components/ui/text";
 import { useTheme } from "@/hooks/use-theme";
 import { RADIUS } from "@/lib/theme";
 import { ComputerComposer } from "@/features/computer/components/computer-composer";
-import { progressOf, SAMPLE_TASK, type StepState, type TaskStep } from "@/features/computer/lib/data";
+import {
+  progressOf,
+  SAMPLE_TASK,
+  type StepState,
+  type TaskStep,
+} from "@/features/computer/lib/data";
 
 // Computer runs a long task in the background and reports what it is doing.
 // The step list is the whole product surface: it is how someone decides whether
@@ -44,7 +49,11 @@ export function ComputerView() {
 
       <Glass tier="card" sheen style={{ marginTop: 24, padding: 20 }}>
         <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-          <Glass tier="control" radius={13} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+          <Glass
+            tier="control"
+            radius={13}
+            style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}
+          >
             <ComputerIcon size={18} color={theme.fg(0.75)} />
           </Glass>
           <View style={{ flex: 1, gap: 4 }}>
@@ -65,7 +74,14 @@ export function ComputerView() {
           accessibilityValue={{ now: progress, min: 0, max: 100 }}
           style={{ marginTop: 16, height: 6, overflow: "hidden" }}
         >
-          <View style={{ width: `${progress}%`, height: "100%", borderRadius: 999, backgroundColor: theme.fg(0.75) }} />
+          <View
+            style={{
+              width: `${progress}%`,
+              height: "100%",
+              borderRadius: 999,
+              backgroundColor: theme.fg(0.75),
+            }}
+          />
         </Glass>
       </Glass>
 
@@ -107,7 +123,13 @@ function StepRow({ step }: { step: TaskStep }) {
       blur={false}
       radius={RADIUS.row}
       accessibilityLabel={`${step.label} (${STATE_LABEL[step.state]})`}
-      style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, padding: 16, opacity: step.state === "pending" ? 0.55 : 1 }}
+      style={{
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: 12,
+        padding: 16,
+        opacity: step.state === "pending" ? 0.55 : 1,
+      }}
     >
       <StepBadge state={step.state} />
 
@@ -127,7 +149,13 @@ const BADGE = 24;
 
 function StepBadge({ state }: { state: StepState }) {
   const { theme } = useTheme();
-  const box = { width: BADGE, height: BADGE, marginTop: 2, alignItems: "center" as const, justifyContent: "center" as const };
+  const box = {
+    width: BADGE,
+    height: BADGE,
+    marginTop: 2,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  };
 
   if (state === "done") {
     return (
@@ -149,7 +177,8 @@ function StepBadge({ state }: { state: StepState }) {
 // The web's animate-pulse: opacity breathing on a two second loop.
 function PulsingDot() {
   const { theme } = useTheme();
-  const opacity = useRef(new Animated.Value(1)).current;
+  // Created once per mount; reading a ref during render trips the hooks lint.
+  const [opacity] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -162,5 +191,9 @@ function PulsingDot() {
     return () => loop.stop();
   }, [opacity]);
 
-  return <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.fg, opacity }} />;
+  return (
+    <Animated.View
+      style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.fg, opacity }}
+    />
+  );
 }

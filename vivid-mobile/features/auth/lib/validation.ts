@@ -15,7 +15,8 @@ export function validateEmail(value: string): string | null {
 export const MIN_PASSWORD_LENGTH = 8;
 
 export function validatePassword(value: string): string | null {
-  if (value.length < MIN_PASSWORD_LENGTH) return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  if (value.length < MIN_PASSWORD_LENGTH)
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
   return null;
 }
 

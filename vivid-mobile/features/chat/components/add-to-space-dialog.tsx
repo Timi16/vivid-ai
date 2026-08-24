@@ -23,7 +23,9 @@ export function AddToSpaceDialog({ open, onOpenChange, spaces }: AddToSpaceDialo
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
 
-  const filtered = spaces.filter((space) => space.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const filtered = spaces.filter((space) =>
+    space.name.toLowerCase().includes(query.trim().toLowerCase())
+  );
 
   function reset() {
     setQuery("");
@@ -57,10 +59,22 @@ export function AddToSpaceDialog({ open, onOpenChange, spaces }: AddToSpaceDialo
       }
     >
       <View style={{ gap: 12 }}>
-        <Input placeholder="Find a space" accessibilityLabel="Find a space" value={query} onChangeText={setQuery} leading={<SearchIcon size={16} color={theme.fg(0.35)} />} />
+        <Input
+          placeholder="Find a space"
+          accessibilityLabel="Find a space"
+          value={query}
+          onChangeText={setQuery}
+          leading={<SearchIcon size={16} color={theme.fg(0.35)} />}
+        />
         <View style={{ gap: 6 }}>
           {filtered.length === 0 ? (
-            <AppText size={12.5} weight="regular" tone={0.45} align="center" style={{ paddingVertical: 24 }}>
+            <AppText
+              size={12.5}
+              weight="regular"
+              tone={0.45}
+              align="center"
+              style={{ paddingVertical: 24 }}
+            >
               No space matches “{query.trim()}”.
             </AppText>
           ) : (

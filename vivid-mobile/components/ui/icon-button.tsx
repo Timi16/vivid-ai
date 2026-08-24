@@ -16,7 +16,14 @@ interface IconButtonProps {
 
 // A square-ish tap target around one icon. The size is the touch target, not
 // the glyph.
-export function IconButton({ label, onPress, disabled, variant = "ghost", size = 36, children }: IconButtonProps) {
+export function IconButton({
+  label,
+  onPress,
+  disabled,
+  variant = "ghost",
+  size = 36,
+  children,
+}: IconButtonProps) {
   const { theme } = useTheme();
   return (
     <Pressable
@@ -29,11 +36,25 @@ export function IconButton({ label, onPress, disabled, variant = "ghost", size =
       style={({ pressed }) => ({ opacity: disabled ? 0.4 : pressed ? 0.75 : 1 })}
     >
       {variant === "ghost" ? (
-        <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: "center", justifyContent: "center", backgroundColor: theme.fg(0.0) }}>
+        <View
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: theme.fg(0.0),
+          }}
+        >
           {children}
         </View>
       ) : (
-        <Glass tier={variant} sheen radius={size / 2} style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+        <Glass
+          tier={variant}
+          sheen
+          radius={size / 2}
+          style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}
+        >
           {children}
         </Glass>
       )}

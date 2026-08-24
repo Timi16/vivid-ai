@@ -93,7 +93,10 @@ export function HistoryView({ entries }: { entries: HistoryEntry[] }) {
     setSelected([]);
     void queryClient.invalidateQueries({ queryKey: ["chats"] });
     const deleted = ids.length - failed;
-    if (failed) toast(`Deleted ${deleted} of ${ids.length}`, { description: "Some sessions could not be deleted." });
+    if (failed)
+      toast(`Deleted ${deleted} of ${ids.length}`, {
+        description: "Some sessions could not be deleted.",
+      });
     else toast(deleted === 1 ? "Session deleted" : `${deleted} sessions deleted`);
   }
 
@@ -106,7 +109,13 @@ export function HistoryView({ entries }: { entries: HistoryEntry[] }) {
           selecting ? (
             <>
               <Button variant="ghost" size="sm" label="Cancel" onPress={() => setSelected([])} />
-              <Button variant="danger" size="sm" label={`Delete ${selected.length}`} icon={<TrashIcon size={15} color="#ffb4b4" />} onPress={() => setDeleteOpen(true)} />
+              <Button
+                variant="danger"
+                size="sm"
+                label={`Delete ${selected.length}`}
+                icon={<TrashIcon size={15} color="#ffb4b4" />}
+                onPress={() => setDeleteOpen(true)}
+              />
             </>
           ) : null
         }
@@ -128,7 +137,10 @@ export function HistoryView({ entries }: { entries: HistoryEntry[] }) {
             icon={<FilterIcon size={14} color={theme.fg(0.7)} />}
             onPress={() => setKindMenu(true)}
           />
-          <Chip label={SORT_OPTIONS.find((o) => o.value === order)?.label ?? "Newest first"} onPress={() => setSortMenu(true)} />
+          <Chip
+            label={SORT_OPTIONS.find((o) => o.value === order)?.label ?? "Newest first"}
+            onPress={() => setSortMenu(true)}
+          />
         </View>
       </View>
 
@@ -162,7 +174,16 @@ export function HistoryView({ entries }: { entries: HistoryEntry[] }) {
       </Menu>
 
       {total === 0 ? (
-        <Glass tier="card" sheen style={{ marginTop: 24, alignItems: "center", paddingHorizontal: 20, paddingVertical: 56 }}>
+        <Glass
+          tier="card"
+          sheen
+          style={{
+            marginTop: 24,
+            alignItems: "center",
+            paddingHorizontal: 20,
+            paddingVertical: 56,
+          }}
+        >
           <View style={{ maxWidth: 320, gap: 6, alignItems: "center" }}>
             <AppText size={14} weight="semibold" tone={0.85}>
               Nothing matches that
@@ -178,7 +199,13 @@ export function HistoryView({ entries }: { entries: HistoryEntry[] }) {
         <View style={{ marginTop: 24, gap: 28 }}>
           {groups.map((group) => (
             <View key={group.label}>
-              <AppText size={11.5} weight="semibold" tone={0.4} uppercase style={{ marginBottom: 10, letterSpacing: 0.6 }}>
+              <AppText
+                size={11.5}
+                weight="semibold"
+                tone={0.4}
+                uppercase
+                style={{ marginBottom: 10, letterSpacing: 0.6 }}
+              >
                 {group.label}
               </AppText>
               <View style={{ gap: 8 }}>
@@ -186,7 +213,15 @@ export function HistoryView({ entries }: { entries: HistoryEntry[] }) {
                   const Icon = KIND_ICON[entry.kind];
                   const on = selected.includes(entry.id);
                   return (
-                    <Glass key={entry.id} tier="card" sheen blur={false} active={on} radius={RADIUS.row} style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}>
+                    <Glass
+                      key={entry.id}
+                      tier="card"
+                      sheen
+                      blur={false}
+                      active={on}
+                      radius={RADIUS.row}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}
+                    >
                       <Pressable
                         accessibilityRole="checkbox"
                         accessibilityState={{ checked: on }}
@@ -204,13 +239,21 @@ export function HistoryView({ entries }: { entries: HistoryEntry[] }) {
                             backgroundColor: on ? theme.colors.fg : theme.fg(0.08),
                           }}
                         >
-                          {on ? <CheckIcon size={16} color={theme.colors.fgInvert} /> : <Icon size={16} color={theme.fg(0.7)} />}
+                          {on ? (
+                            <CheckIcon size={16} color={theme.colors.fgInvert} />
+                          ) : (
+                            <Icon size={16} color={theme.fg(0.7)} />
+                          )}
                         </View>
                       </Pressable>
 
                       <Pressable
                         accessibilityRole="link"
-                        onPress={() => (selecting ? toggle(entry.id) : router.push({ pathname: "/thread/[id]", params: { id: entry.id } }))}
+                        onPress={() =>
+                          selecting
+                            ? toggle(entry.id)
+                            : router.push({ pathname: "/thread/[id]", params: { id: entry.id } })
+                        }
                         style={{ flex: 1, gap: 2 }}
                       >
                         <AppText size={13.5} weight="semibold" numberOfLines={1}>
@@ -239,7 +282,9 @@ export function HistoryView({ entries }: { entries: HistoryEntry[] }) {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         tone="danger"
-        title={selected.length === 1 ? "Delete this session?" : `Delete ${selected.length} sessions?`}
+        title={
+          selected.length === 1 ? "Delete this session?" : `Delete ${selected.length} sessions?`
+        }
         description="They are removed from your history along with their answers. This can't be undone."
         confirmLabel="Delete"
         loading={deleting}

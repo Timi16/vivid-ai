@@ -60,6 +60,7 @@ class Chat(Base):
         ForeignKey("clients.id"), default=settings.DEFAULT_CLIENT_ID)
     title: Mapped[str | None] = mapped_column(String(200), default=None)
     language: Mapped[str] = mapped_column(String(8), default="en")
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 

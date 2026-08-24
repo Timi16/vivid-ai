@@ -1,32 +1,16 @@
-allowBuilds:
-  bufferutil: set this to true or false
-  utf-8-validate: set this to true or false
-minimumReleaseAgeExclude:
-  - '@expo/cli@57.0.18'
-  - '@expo/config-plugins@57.0.9'
-  - '@expo/config@57.0.9'
-  - '@expo/fingerprint@0.20.10'
-  - '@expo/image-utils@0.11.5'
-  - '@expo/metro-config@57.0.10'
-  - '@expo/metro-file-map@57.0.2'
-  - '@expo/metro-runtime@57.0.13'
-  - '@expo/prebuild-config@57.0.14'
-  - '@expo/require-utils@57.0.5'
-  - '@expo/ui@57.0.13'
-  - babel-preset-expo@57.0.8
-  - expo-asset@57.0.14
-  - expo-constants@57.0.14
-  - expo-crypto@57.0.2
-  - expo-dev-client@57.0.15
-  - expo-dev-launcher@57.0.15
-  - expo-dev-menu@57.0.15
-  - expo-image-picker@57.0.13
-  - expo-modules-autolinking@57.0.11
-  - expo-modules-core@57.0.13
-  - expo-router@57.0.16
-  - expo-splash-screen@57.0.8
-  - expo@57.0.16
 nodeLinker: hoisted
-onlyBuiltDependencies:
-  - bufferutil
-  - utf-8-validate
+# Optional native builds (ws speedups, the eslint resolver). Not needed, so
+# their postinstall scripts are declined rather than left pending.
+allowBuilds:
+  bufferutil: false
+  utf-8-validate: false
+  unrs-resolver: false
+# `expo install` pins the SDK's own patch releases, which are often hours old.
+# The release-age policy stays on for everything else.
+minimumReleaseAgeExclude:
+  - expo
+  - "expo-*"
+  - "@expo/*"
+  - babel-preset-expo
+  - jest-expo
+  - eslint-config-expo

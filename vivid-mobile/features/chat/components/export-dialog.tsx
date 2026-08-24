@@ -33,7 +33,9 @@ export function ExportDialog({ open, onOpenChange, sessionTitle }: ExportDialogP
             label="Export"
             onPress={() => {
               onOpenChange(false);
-              toast("Export isn't available yet", { description: "This turns on once the export service ships." });
+              toast("Export isn't available yet", {
+                description: "This turns on once the export service ships.",
+              });
             }}
           />
         </>
@@ -41,7 +43,14 @@ export function ExportDialog({ open, onOpenChange, sessionTitle }: ExportDialogP
     >
       <View style={{ gap: 8 }}>
         {EXPORT_FORMATS.map((option) => (
-          <SelectRow key={option.value} radio title={option.label} detail={option.detail} selected={format === option.value} onPress={() => setFormat(option.value)} />
+          <SelectRow
+            key={option.value}
+            radio
+            title={option.label}
+            detail={option.detail}
+            selected={format === option.value}
+            onPress={() => setFormat(option.value)}
+          />
         ))}
       </View>
     </Modal>

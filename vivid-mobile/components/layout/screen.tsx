@@ -1,4 +1,11 @@
-import { KeyboardAvoidingView, Platform, ScrollView, View, type StyleProp, type ViewStyle } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ScreenProps {
@@ -13,7 +20,13 @@ interface ScreenProps {
 
 // The frame every inner page renders inside: consistent gutters, safe-area
 // aware, keyboard aware. Pages compose features inside it.
-export function Screen({ scroll = true, center = false, padded = true, contentStyle, children }: ScreenProps) {
+export function Screen({
+  scroll = true,
+  center = false,
+  padded = true,
+  contentStyle,
+  children,
+}: ScreenProps) {
   const insets = useSafeAreaInsets();
   const padding = {
     paddingHorizontal: padded ? 20 : 0,
@@ -22,15 +35,25 @@ export function Screen({ scroll = true, center = false, padded = true, contentSt
   };
   if (!scroll) {
     return (
-      <View style={[{ flex: 1 }, padding, center && { justifyContent: "center" }, contentStyle]}>{children}</View>
+      <View style={[{ flex: 1 }, padding, center && { justifyContent: "center" }, contentStyle]}>
+        {children}
+      </View>
     );
   }
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={{ flex: 1 }}
+    >
       <ScrollView
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        contentContainerStyle={[{ flexGrow: 1 }, padding, center && { justifyContent: "center" }, contentStyle]}
+        contentContainerStyle={[
+          { flexGrow: 1 },
+          padding,
+          center && { justifyContent: "center" },
+          contentStyle,
+        ]}
       >
         {children}
       </ScrollView>

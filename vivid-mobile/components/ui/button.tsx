@@ -26,7 +26,13 @@ export interface ButtonProps {
 
 const HEIGHT: Record<ButtonSize, number> = { sm: 32, md: 40, lg: 48, icon: 40, "icon-sm": 32 };
 const PADDING: Record<ButtonSize, number> = { sm: 12, md: 16, lg: 24, icon: 0, "icon-sm": 0 };
-const TEXT: Record<ButtonSize, number> = { sm: 12.5, md: 13.5, lg: 15, icon: 13.5, "icon-sm": 12.5 };
+const TEXT: Record<ButtonSize, number> = {
+  sm: 12.5,
+  md: 13.5,
+  lg: 15,
+  icon: 13.5,
+  "icon-sm": 12.5,
+};
 
 // Every variant is the same glass at a different brightness. Hierarchy comes
 // from how much light the surface carries, not from one being flat.
@@ -88,7 +94,10 @@ export function Button({
       disabled={blocked}
       onPress={onPress}
       style={({ pressed }) => [
-        { opacity: blocked ? 0.45 : pressed ? 0.8 : 1, alignSelf: fullWidth ? "stretch" : "flex-start" },
+        {
+          opacity: blocked ? 0.45 : pressed ? 0.8 : 1,
+          alignSelf: fullWidth ? "stretch" : "flex-start",
+        },
         style,
       ]}
     >
@@ -107,7 +116,9 @@ export function Button({
           {content}
         </Glass>
       ) : (
-        <View style={{ borderRadius: 999, borderWidth: 1, borderColor: "transparent" }}>{content}</View>
+        <View style={{ borderRadius: 999, borderWidth: 1, borderColor: "transparent" }}>
+          {content}
+        </View>
       )}
     </Pressable>
   );

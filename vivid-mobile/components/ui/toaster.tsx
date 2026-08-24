@@ -14,11 +14,23 @@ export function Toaster() {
   return (
     <View
       pointerEvents="box-none"
-      style={{ position: "absolute", top: insets.top + 8, left: 16, right: 16, gap: 8, zIndex: 100 }}
+      style={{
+        position: "absolute",
+        top: insets.top + 8,
+        left: 16,
+        right: 16,
+        gap: 8,
+        zIndex: 100,
+      }}
     >
       {toasts.map((item) => (
         <Pressable key={item.id} onPress={() => dismissToast(item.id)} accessibilityRole="alert">
-          <Glass tier="sheet" sheen radius={RADIUS.input} style={{ paddingHorizontal: 14, paddingVertical: 12, gap: 2 }}>
+          <Glass
+            tier="sheet"
+            sheen
+            radius={RADIUS.input}
+            style={{ paddingHorizontal: 14, paddingVertical: 12, gap: 2 }}
+          >
             <AppText size={13} weight="semibold">
               {item.title}
             </AppText>

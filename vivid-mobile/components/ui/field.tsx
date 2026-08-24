@@ -20,7 +20,12 @@ export function Field({ label, hint, error, required, style, children }: FieldPr
       {label ? (
         <AppText size={13} weight="semibold" tone={0.85}>
           {label}
-          {required ? <AppText size={13} color={theme.colors.down}> *</AppText> : null}
+          {required ? (
+            <AppText size={13} color={theme.colors.down}>
+              {" "}
+              *
+            </AppText>
+          ) : null}
         </AppText>
       ) : null}
       {children}

@@ -18,7 +18,13 @@ export function SettingRow({ label, detail, control, style }: SettingRowProps) {
   return (
     <View
       style={[
-        { flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 16, paddingVertical: 14 },
+        {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 16,
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+        },
         style,
       ]}
     >

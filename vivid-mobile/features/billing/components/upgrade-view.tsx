@@ -35,7 +35,14 @@ export function UpgradeView() {
         <AppText display size={30} lineHeight={34} align="center">
           Upgrade your plan
         </AppText>
-        <AppText size={13.5} weight="regular" tone={0.55} align="center" lineHeight={22} style={{ maxWidth: 340 }}>
+        <AppText
+          size={13.5}
+          weight="regular"
+          tone={0.55}
+          align="center"
+          lineHeight={22}
+          style={{ maxWidth: 340 }}
+        >
           More searches, better models, and the tools for longer work. Cancel at any time.
         </AppText>
 
@@ -44,7 +51,12 @@ export function UpgradeView() {
 
       <View style={{ marginTop: 36, gap: 16 }}>
         {BILLING_PLANS.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} cadence={cadence} current={plan.id === CURRENT_PLAN_ID} />
+          <PlanCard
+            key={plan.id}
+            plan={plan}
+            cadence={cadence}
+            current={plan.id === CURRENT_PLAN_ID}
+          />
         ))}
       </View>
 

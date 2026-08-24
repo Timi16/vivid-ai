@@ -46,7 +46,11 @@ export function AsyncError({ error, subject, unreachableDetail, onRetry }: Async
   const message = (error as Error | null)?.message ?? "Something went wrong on our side.";
   const unreachable = message === NETWORK_ERROR_MESSAGE;
   return (
-    <Glass tier="card" sheen style={{ alignItems: "center", paddingHorizontal: 20, paddingVertical: 48 }}>
+    <Glass
+      tier="card"
+      sheen
+      style={{ alignItems: "center", paddingHorizontal: 20, paddingVertical: 48 }}
+    >
       <View style={{ maxWidth: 340, alignItems: "center", gap: 6 }}>
         <AppText size={14} weight="semibold" tone={0.85} align="center">
           {unreachable ? `${subject} isn't available right now.` : `Couldn't load ${subject}.`}
@@ -54,7 +58,15 @@ export function AsyncError({ error, subject, unreachableDetail, onRetry }: Async
         <AppText size={12.5} weight="regular" tone={0.5} align="center">
           {unreachable ? (unreachableDetail ?? message) : message}
         </AppText>
-        {onRetry ? <Button variant="secondary" size="sm" label="Try again" onPress={onRetry} style={{ marginTop: 12 }} /> : null}
+        {onRetry ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            label="Try again"
+            onPress={onRetry}
+            style={{ marginTop: 12 }}
+          />
+        ) : null}
       </View>
     </Glass>
   );

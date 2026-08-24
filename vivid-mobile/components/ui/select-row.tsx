@@ -19,7 +19,15 @@ interface SelectRowProps {
 
 // One selectable glass row. Export formats, report reasons, spaces to file
 // under, theme choices: they all read as this.
-export function SelectRow({ title, detail, selected, onPress, leading, trailing, radio = false }: SelectRowProps) {
+export function SelectRow({
+  title,
+  detail,
+  selected,
+  onPress,
+  leading,
+  trailing,
+  radio = false,
+}: SelectRowProps) {
   const { theme } = useTheme();
   return (
     <Pressable
@@ -33,7 +41,13 @@ export function SelectRow({ title, detail, selected, onPress, leading, trailing,
         sheen
         active={selected}
         radius={RADIUS.input}
-        style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12 }}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+          paddingHorizontal: 14,
+          paddingVertical: 12,
+        }}
       >
         {radio ? (
           <View
@@ -48,7 +62,16 @@ export function SelectRow({ title, detail, selected, onPress, leading, trailing,
               justifyContent: "center",
             }}
           >
-            {selected ? <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: theme.colors.fgInvert }} /> : null}
+            {selected ? (
+              <View
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: theme.colors.fgInvert,
+                }}
+              />
+            ) : null}
           </View>
         ) : (
           leading

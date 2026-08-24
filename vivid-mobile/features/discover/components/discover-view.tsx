@@ -41,7 +41,11 @@ export function DiscoverView({ topic }: DiscoverViewProps) {
         />
       </View>
 
-      <Glass tier="card" sheen style={{ marginTop: 24, alignItems: "center", paddingHorizontal: 20, paddingVertical: 80 }}>
+      <Glass
+        tier="card"
+        sheen
+        style={{ marginTop: 24, alignItems: "center", paddingHorizontal: 20, paddingVertical: 80 }}
+      >
         <View style={{ maxWidth: 340, alignItems: "center", gap: 12 }}>
           <Glass
             tier="control"

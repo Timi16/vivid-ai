@@ -8,10 +8,11 @@ const LOOKUP = new Uint8Array(256);
 for (let i = 0; i < ALPHABET.length; i++) LOOKUP[ALPHABET.charCodeAt(i)] = i;
 
 export function decodeBase64(input: string): Uint8Array {
+  // Strip padding and whitespace first; the byte count then follows from the
+  // number of data characters alone (four characters carry three bytes).
   const clean = input.replace(/[^A-Za-z0-9+/]/g, "");
-  const padding = input.endsWith("==") ? 2 : input.endsWith("=") ? 1 : 0;
-  const length = Math.floor((clean.length * 3) / 4) - padding;
-  const out = new Uint8Array(Math.max(0, length));
+  const length = Math.floor((clean.length * 3) / 4);
+  const out = new Uint8Array(length);
   let cursor = 0;
   for (let i = 0; i < clean.length; i += 4) {
     const a = LOOKUP[clean.charCodeAt(i)];

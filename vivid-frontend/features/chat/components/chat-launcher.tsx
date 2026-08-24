@@ -10,19 +10,20 @@ import { backend } from "@/lib/backend/client";
 import { cn } from "@/lib/utils";
 
 interface ChatLauncherProps {
-  // Rendered under the composer. The route passes it, so this feature does not
-  // need to know what a backend status indicator is.
-  statusSlot?: React.ReactNode;
+  // True until the user has a single chat. The route knows (history does);
+  // the launcher only decides how to welcome them.
+  isFirstRun?: boolean;
 }
 
 // The empty state: wordmark, composer, starter prompts. Submitting creates a
 // chat on the backend, stashes the prompt, and lands in the thread — which
 // sends it the moment it mounts.
-export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
+export function ChatLauncher({ isFirstRun = false }: ChatLauncherProps) {
   const router = useRouter();
   const [value, setValue] = useState("");
   const [seed, setSeed] = useState(1);
   const [creating, setCreating] = useState(false);
+  const [language, setLanguage] = useState("en");
   const [pendingImage, setPendingImage] = useState<{
     id: string;
     filename: string | null;
@@ -50,7 +51,7 @@ export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
     if (creating) return;
     setCreating(true);
     try {
-      const chat = await backend.createChat("en");
+      const chat = await backend.createChat(language);
       sessionStorage.setItem(
         `vivid-pending-${chat.id}`,
         JSON.stringify({
@@ -72,7 +73,7 @@ export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
     if (creating) return;
     setCreating(true);
     try {
-      const chat = await backend.createChat("en");
+      const chat = await backend.createChat(language);
       sessionStorage.setItem(`vivid-pending-call-${chat.id}`, "1");
       router.push(`/thread/${chat.id}`);
     } catch (err) {
@@ -83,14 +84,21 @@ export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[720px] flex-col items-center justify-center px-5 py-16">
-      <h1 className="ws-display text-fg mb-8 text-[38px] leading-none">
+      <h1 className="ws-display text-fg mb-3 text-[38px] leading-none">
         Vivid <span className="text-fg/45 font-medium">AI</span>
       </h1>
+      <p className="text-fg/45 mb-8 text-[14px]">
+        {isFirstRun
+          ? "Ask anything, in English, Pidgin, Yorùbá or Igbo. Or tap the waveform and just talk."
+          : "What can I help with?"}
+      </p>
 
       <ChatComposer
         value={value}
         onValueChange={setValue}
         onSubmit={launch}
+        language={language}
+        onLanguageChange={setLanguage}
         busy={creating}
         onStartCall={launchCall}
         onAttachFile={attachFile}
@@ -139,7 +147,6 @@ export function ChatLauncher({ statusSlot }: ChatLauncherProps) {
         </button>
       </div>
 
-      {statusSlot ? <div className="mt-10">{statusSlot}</div> : null}
     </div>
   );
 }

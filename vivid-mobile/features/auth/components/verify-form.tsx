@@ -52,7 +52,10 @@ export function VerifyForm({ email }: { email?: string }) {
     >
       <View style={{ gap: 20 }}>
         <View>
-          <Pressable accessibilityLabel="Verification code" onPress={() => inputRef.current?.focus()}>
+          <Pressable
+            accessibilityLabel="Verification code"
+            onPress={() => inputRef.current?.focus()}
+          >
             <View style={{ flexDirection: "row", gap: 8 }}>
               {Array.from({ length: CODE_LENGTH }, (_, i) => {
                 const char = code[i];
@@ -93,20 +96,36 @@ export function VerifyForm({ email }: { email?: string }) {
             />
           </Pressable>
           {error ? (
-            <AppText size={12} weight="regular" color={theme.colors.down} style={{ marginTop: 10 }} accessibilityRole="alert">
+            <AppText
+              size={12}
+              weight="regular"
+              color={theme.colors.down}
+              style={{ marginTop: 10 }}
+              accessibilityRole="alert"
+            >
               {error}
             </AppText>
           ) : null}
         </View>
 
-        <Button size="lg" label="Verify and continue" fullWidth loading={submitting} onPress={submit} />
+        <Button
+          size="lg"
+          label="Verify and continue"
+          fullWidth
+          loading={submitting}
+          onPress={submit}
+        />
 
         {secondsLeft > 0 ? (
           <AppText size={12.5} weight="regular" tone={0.45} align="center">
             Resend the code in {secondsLeft}s
           </AppText>
         ) : (
-          <Pressable accessibilityRole="button" onPress={() => setSecondsLeft(RESEND_SECONDS)} style={{ alignItems: "center" }}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setSecondsLeft(RESEND_SECONDS)}
+            style={{ alignItems: "center" }}
+          >
             <AppText size={12.5} tone={0.7} style={{ textDecorationLine: "underline" }}>
               Send a new code
             </AppText>

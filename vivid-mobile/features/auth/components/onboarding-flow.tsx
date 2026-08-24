@@ -10,7 +10,12 @@ import { CheckIcon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { AppText } from "@/components/ui/text";
 import { AuthCard } from "@/features/auth/components/auth-card";
-import { INTERESTS, MIN_INTERESTS, canContinue, toggleInterest } from "@/features/auth/lib/interests";
+import {
+  INTERESTS,
+  MIN_INTERESTS,
+  canContinue,
+  toggleInterest,
+} from "@/features/auth/lib/interests";
 import { PLANS } from "@/features/auth/lib/plans";
 import { validateName } from "@/features/auth/lib/validation";
 import { useTheme } from "@/hooks/use-theme";
@@ -39,7 +44,15 @@ export function OnboardingFlow() {
       </AppText>
       <View style={{ flex: 1, flexDirection: "row", gap: 4 }}>
         {STEPS.map((s, i) => (
-          <View key={s} style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: i <= index ? theme.fg(0.7) : theme.fg(0.12) }} />
+          <View
+            key={s}
+            style={{
+              flex: 1,
+              height: 3,
+              borderRadius: 2,
+              backgroundColor: i <= index ? theme.fg(0.7) : theme.fg(0.12),
+            }}
+          />
         ))}
       </View>
     </View>
@@ -47,7 +60,11 @@ export function OnboardingFlow() {
 
   if (step === "name") {
     return (
-      <AuthCard eyebrow={eyebrow} title="What should we call you?" subtitle="This is how Vivid will address you.">
+      <AuthCard
+        eyebrow={eyebrow}
+        title="What should we call you?"
+        subtitle="This is how Vivid will address you."
+      >
         <View style={{ gap: 20 }}>
           <Field label="Your name" error={nameError ?? undefined}>
             <Input
@@ -106,7 +123,14 @@ export function OnboardingFlow() {
               );
             })}
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
             <AppText size={12.5} weight="regular" tone={0.45}>
               {selected.length} selected
             </AppText>
@@ -121,20 +145,43 @@ export function OnboardingFlow() {
   }
 
   return (
-    <AuthCard eyebrow={eyebrow} title="Choose your plan" subtitle="Start free and upgrade whenever you need more.">
+    <AuthCard
+      eyebrow={eyebrow}
+      title="Choose your plan"
+      subtitle="Start free and upgrade whenever you need more."
+    >
       <View style={{ gap: 20 }}>
         <View style={{ gap: 12 }}>
           {PLANS.map((option) => {
             const on = plan === option.id;
             return (
-              <Pressable key={option.id} accessibilityRole="radio" accessibilityState={{ selected: on }} onPress={() => setPlan(option.id)}>
+              <Pressable
+                key={option.id}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: on }}
+                onPress={() => setPlan(option.id)}
+              >
                 <Glass tier="card" sheen active={on} blur={false} style={{ padding: 20, gap: 12 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                    }}
+                  >
                     <AppText size={14} weight="semibold">
                       {option.name}
                     </AppText>
                     {option.featured ? (
-                      <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: theme.fg(0.15) }}>
+                      <View
+                        style={{
+                          borderRadius: 999,
+                          paddingHorizontal: 8,
+                          paddingVertical: 2,
+                          backgroundColor: theme.fg(0.15),
+                        }}
+                      >
                         <AppText size={10.5} weight="semibold" tone={0.8}>
                           Popular
                         </AppText>
@@ -151,7 +198,10 @@ export function OnboardingFlow() {
                   </View>
                   <View style={{ gap: 6 }}>
                     {option.features.map((feature) => (
-                      <View key={feature} style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+                      <View
+                        key={feature}
+                        style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}
+                      >
                         <View style={{ marginTop: 2 }}>
                           <CheckIcon size={13} color={theme.fg(0.4)} />
                         </View>
@@ -166,7 +216,14 @@ export function OnboardingFlow() {
             );
           })}
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
           <Button variant="ghost" label="Back" onPress={() => setStep("interests")} />
           <Button label="Start using Vivid" onPress={() => router.replace("/sign-in")} />
         </View>

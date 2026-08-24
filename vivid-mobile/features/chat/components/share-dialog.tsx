@@ -27,9 +27,18 @@ export function ShareDialog({ open, onOpenChange, sessionId }: ShareDialogProps)
   const url = `vivid://thread/${sessionId}`;
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Share thread" description="Anyone with the link can read this thread. Your account stays private.">
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Share thread"
+      description="Anyone with the link can read this thread. Your account stays private."
+    >
       <View style={{ gap: 16 }}>
-        <Glass tier="well" radius={RADIUS.input} style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 12 }}>
+        <Glass
+          tier="well"
+          radius={RADIUS.input}
+          style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 12 }}
+        >
           <LinkIcon size={16} color={theme.fg(0.4)} />
           <AppText size={12.5} tone={0.7} mono numberOfLines={1} style={{ flex: 1 }}>
             {url}
@@ -41,13 +50,20 @@ export function ShareDialog({ open, onOpenChange, sessionId }: ShareDialogProps)
             icon={<CopyIcon size={14} color={theme.colors.fg} />}
             onPress={async () => {
               const ok = await copyText(url);
-              toast(ok ? "Link copied" : "Couldn't copy the link", { description: ok ? undefined : "Copy it from the field instead." });
+              toast(ok ? "Link copied" : "Couldn't copy the link", {
+                description: ok ? undefined : "Copy it from the field instead.",
+              });
             }}
           />
         </Glass>
 
         <Pressable accessibilityRole="switch" onPress={() => setPublicLink((prev) => !prev)}>
-          <Glass tier="control" sheen radius={RADIUS.input} style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}>
+          <Glass
+            tier="control"
+            sheen
+            radius={RADIUS.input}
+            style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}
+          >
             <View style={{ flex: 1, gap: 2 }}>
               <AppText size={13} weight="semibold">
                 Make it public

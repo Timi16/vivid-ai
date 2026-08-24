@@ -59,7 +59,13 @@ export function ArtifactSurface({
       {artifact.duration ? (
         <Glass
           tier="control"
-          style={{ position: "absolute", right: 10, bottom: 10, paddingHorizontal: 8, paddingVertical: 2 }}
+          style={{
+            position: "absolute",
+            right: 10,
+            bottom: 10,
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+          }}
         >
           <AppText size={11} weight="semibold" tone={0.85}>
             {formatDuration(artifact.duration)}

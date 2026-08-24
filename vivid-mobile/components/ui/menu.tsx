@@ -33,7 +33,17 @@ export function Menu({ open, onOpenChange, title, children }: MenuProps) {
         style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.55)" }]}
       />
       <View pointerEvents="box-none" style={{ flex: 1, justifyContent: "flex-end", padding: 12 }}>
-        <Glass tier="sheet" sheen radius={RADIUS.sheet} style={{ paddingVertical: 8, paddingHorizontal: 6, marginBottom: insets.bottom, maxHeight: "70%" }}>
+        <Glass
+          tier="sheet"
+          sheen
+          radius={RADIUS.sheet}
+          style={{
+            paddingVertical: 8,
+            paddingHorizontal: 6,
+            marginBottom: insets.bottom,
+            maxHeight: "70%",
+          }}
+        >
           {title ? <MenuLabel>{title}</MenuLabel> : null}
           <ScrollView bounces={false}>{children}</ScrollView>
         </Glass>
@@ -52,7 +62,14 @@ interface MenuItemProps {
   onPress?: () => void;
 }
 
-export function MenuItem({ label, icon, tone = "default", disabled, selected, onPress }: MenuItemProps) {
+export function MenuItem({
+  label,
+  icon,
+  tone = "default",
+  disabled,
+  selected,
+  onPress,
+}: MenuItemProps) {
   const { theme } = useTheme();
   const color = tone === "danger" ? theme.colors.down : theme.fg(0.85);
   return (
@@ -83,12 +100,27 @@ export function MenuItem({ label, icon, tone = "default", disabled, selected, on
 
 export function MenuSeparator() {
   const { theme } = useTheme();
-  return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: theme.fg(0.12), marginVertical: 6, marginHorizontal: 8 }} />;
+  return (
+    <View
+      style={{
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: theme.fg(0.12),
+        marginVertical: 6,
+        marginHorizontal: 8,
+      }}
+    />
+  );
 }
 
 export function MenuLabel({ children }: { children: React.ReactNode }) {
   return (
-    <AppText size={11} weight="semibold" tone={0.35} uppercase style={{ paddingHorizontal: 12, paddingTop: 6, paddingBottom: 4, letterSpacing: 0.6 }}>
+    <AppText
+      size={11}
+      weight="semibold"
+      tone={0.35}
+      uppercase
+      style={{ paddingHorizontal: 12, paddingTop: 6, paddingBottom: 4, letterSpacing: 0.6 }}
+    >
       {children}
     </AppText>
   );

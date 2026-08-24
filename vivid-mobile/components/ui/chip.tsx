@@ -14,7 +14,14 @@ interface ChipProps {
 }
 
 // A glass pill: starter prompts, interest picks, filter tabs, feedback tags.
-export function Chip({ label, selected = false, icon, onPress, accessibilityRole = "button", size = "md" }: ChipProps) {
+export function Chip({
+  label,
+  selected = false,
+  icon,
+  onPress,
+  accessibilityRole = "button",
+  size = "md",
+}: ChipProps) {
   const { theme } = useTheme();
   return (
     <Pressable

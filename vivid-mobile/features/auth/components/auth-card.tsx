@@ -32,7 +32,13 @@ export function AuthCard({ title, subtitle, eyebrow, footer, children }: AuthCar
           {title}
         </AppText>
         {subtitle ? (
-          <AppText size={13.5} weight="regular" tone={0.55} lineHeight={20} style={{ marginTop: 8 }}>
+          <AppText
+            size={13.5}
+            weight="regular"
+            tone={0.55}
+            lineHeight={20}
+            style={{ marginTop: 8 }}
+          >
             {subtitle}
           </AppText>
         ) : null}

@@ -26,7 +26,9 @@ export function useSession(id: string) {
         title: chat.title ?? "New chat",
         language: chat.language,
         updatedAt: chat.updated_at,
-        messages: messages.filter((m) => m.role === "user" || m.role === "assistant").map(toLiveMessage),
+        messages: messages
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map(toLiveMessage),
       };
     },
     // The thread view layers LIVE messages on top of this snapshot; a

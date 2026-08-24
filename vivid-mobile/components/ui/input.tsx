@@ -13,7 +13,14 @@ export interface InputProps extends TextInputProps {
 
 // A text field cut into the glass rather than floating on it. The well tier
 // inverts the highlight so it reads as recessed.
-export function Input({ invalid, leading, containerStyle, style, multiline, ...props }: InputProps) {
+export function Input({
+  invalid,
+  leading,
+  containerStyle,
+  style,
+  multiline,
+  ...props
+}: InputProps) {
   const { theme } = useTheme();
   const [focused, setFocused] = useState(false);
   return (
@@ -32,7 +39,9 @@ export function Input({ invalid, leading, containerStyle, style, multiline, ...p
         containerStyle,
       ]}
     >
-      {leading ? <View style={{ marginRight: 10, marginTop: multiline ? 12 : 0 }}>{leading}</View> : null}
+      {leading ? (
+        <View style={{ marginRight: 10, marginTop: multiline ? 12 : 0 }}>{leading}</View>
+      ) : null}
       <TextInput
         {...props}
         multiline={multiline}

@@ -88,7 +88,8 @@ interface RequestInitPlus extends RequestInit {
 }
 
 // One voice for every network failure: actionable, not "Network request failed".
-export const NETWORK_ERROR_MESSAGE = "Network problem: check your internet connection and try again.";
+export const NETWORK_ERROR_MESSAGE =
+  "Network problem: check your internet connection and try again.";
 
 async function request<T>(path: string, init: RequestInitPlus = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
@@ -123,12 +124,45 @@ async function request<T>(path: string, init: RequestInitPlus = {}, retry = true
   return (res.status === 204 ? null : await res.json()) as T;
 }
 
+export interface UserOut {
+  id: string;
+  email: string;
+  name: string | null;
+  avatar_url: string | null;
+  // The address the user actually signed in with, for social accounts whose
+  // `email` is a synthetic key.
+  profile_email: string | null;
+  created_at: string;
+}
+
+// Google's pass-through profile from the Decane callback. Display data for
+// the account, never an identity claim.
+export interface GoogleProfile {
+  name?: string | null;
+  email?: string | null;
+  picture?: string | null;
+}
+
 export interface ChatOut {
   id: string;
   title: string | null;
   language: string;
+  pinned: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ArtifactOut {
+  id: string;
+  kind: "image" | "file";
+  filename: string | null;
+  mime: string;
+  size_bytes: number;
+  url: string;
+  chat_id: string;
+  chat_title: string | null;
+  message_id: string | null;
+  created_at: string;
 }
 
 export interface AttachmentOut {
@@ -167,15 +201,24 @@ export const backend = {
     request<TokenBundle>("/auth/signup", { method: "POST", json: { email, password } }),
   login: (email: string, password: string) =>
     request<TokenBundle>("/auth/login", { method: "POST", json: { email, password } }),
-  // Social sign-in: exchange a Decane access token for our own session.
-  decaneLogin: (accessToken: string) =>
-    request<TokenBundle>("/auth/decane", { method: "POST", json: { access_token: accessToken } }),
+  // Social sign-in: exchange a Decane access token for our own session. The
+  // Google profile (display-only) rides along so the account gets a name.
+  decaneLogin: (accessToken: string, profile: GoogleProfile = {}) =>
+    request<TokenBundle>("/auth/decane", {
+      method: "POST",
+      json: { access_token: accessToken, ...profile },
+    }),
+  me: () => request<UserOut>("/auth/me"),
+  updateMe: (name: string) => request<UserOut>("/auth/me", { method: "PATCH", json: { name } }),
   health: () => request<HealthOut>("/health"),
   chats: () => request<ChatOut[]>("/chats"),
   chat: (id: string) => request<ChatOut>(`/chats/${id}`),
   createChat: (language = "en") =>
     request<ChatOut>("/chats", { method: "POST", json: { language } }),
   deleteChat: (id: string) => request<null>(`/chats/${id}`, { method: "DELETE" }),
+  updateChat: (id: string, patch: { title?: string; pinned?: boolean }) =>
+    request<ChatOut>(`/chats/${id}`, { method: "PATCH", json: patch }),
+  artifacts: () => request<ArtifactOut[]>("/artifacts"),
   messages: (chatId: string) => request<MessageOut[]>(`/chats/${chatId}/messages`),
   // Synthesizes on first call, then returns the cached audio attachment.
   speakMessage: (chatId: string, messageId: string) =>
@@ -187,7 +230,10 @@ export const backend = {
     // The RN FormData file shape is not in the DOM typings; cast at the seam.
     form.append("file", file as unknown as Blob);
     if (chatId) form.append("chat_id", chatId);
-    return request<AttachmentOut & { url: string }>("/attachments", { method: "POST", body: form });
+    return request<AttachmentOut & { url: string }>("/attachments", {
+      method: "POST",
+      body: form,
+    });
   },
   connectors: () =>
     request<{ id: string; provider: string; name: string; mode: string }[]>("/connectors"),

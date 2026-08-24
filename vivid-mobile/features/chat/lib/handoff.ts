@@ -23,7 +23,11 @@ export function takePendingPrompt(chatId: string): PendingPrompt | null {
   try {
     const parsed = JSON.parse(raw) as Partial<PendingPrompt>;
     if (typeof parsed.text !== "string") return null;
-    return { text: parsed.text, attachmentId: parsed.attachmentId ?? null, imageUrl: parsed.imageUrl ?? null };
+    return {
+      text: parsed.text,
+      attachmentId: parsed.attachmentId ?? null,
+      imageUrl: parsed.imageUrl ?? null,
+    };
   } catch {
     return null;
   }

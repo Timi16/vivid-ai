@@ -24,7 +24,17 @@ export function ProviderButton({ provider, onPress, disabled }: ProviderButtonPr
       onPress={onPress}
       style={({ pressed }) => ({ opacity: disabled ? 0.45 : pressed ? 0.8 : 1 })}
     >
-      <Glass tier="control" sheen style={{ height: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 }}>
+      <Glass
+        tier="control"
+        sheen
+        style={{
+          height: 44,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 10,
+        }}
+      >
         <GoogleMark size={17} />
         <AppText size={13.5} weight="semibold">
           {LABEL[provider]}

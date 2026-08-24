@@ -1,24 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 
 import { getTokens } from "@/lib/backend/client";
 
-// Client-side guard for the signed-in shell: no token, no app. Tokens live in
-// localStorage, so this can only run after mount.
+// Tokens live in localStorage, so the signed-in state is browser-only. Reading
+// it through an external store gives the server a stable "not yet" answer and
+// the client the real one, with no state set from an effect.
+function subscribe(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+// Client-side guard for the signed-in shell: no token, no app.
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const signedIn = useSyncExternalStore(
+    subscribe,
+    () => Boolean(getTokens()),
+    () => false
+  );
+  const mounted = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false
+  );
 
   useEffect(() => {
-    if (!getTokens()) {
-      router.replace("/sign-in");
-      return;
-    }
-    setReady(true);
-  }, [router]);
+    if (mounted && !signedIn) router.replace("/sign-in");
+  }, [mounted, signedIn, router]);
 
-  if (!ready) return null;
+  if (!signedIn) return null;
   return <>{children}</>;
 }

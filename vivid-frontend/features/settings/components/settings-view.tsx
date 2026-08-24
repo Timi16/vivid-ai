@@ -7,7 +7,7 @@ import { AppearancePanel } from "@/features/settings/components/appearance-panel
 import { LanguagePanel } from "@/features/settings/components/language-panel";
 import { NotificationsPanel } from "@/features/settings/components/notifications-panel";
 import { ShortcutsPanel } from "@/features/settings/components/shortcuts-panel";
-import { displayEmail, displayName, useMe } from "@/features/auth/hooks/use-me";
+import { displayEmail, displayName, useMe } from "@/hooks/use-me";
 
 const TABS = [
   { value: "account", label: "Account" },
@@ -20,9 +20,14 @@ const TABS = [
 interface SettingsViewProps {
   plan: string;
   planActionSlot?: React.ReactNode;
+  // Rendered under the account panel. The route passes the backend status
+  // indicator, so settings never imports the system slice.
+  systemSlot?: React.ReactNode;
 }
 
-export function SettingsView({ plan, planActionSlot }: SettingsViewProps) {
+export function SettingsView({ plan, planActionSlot,
+  systemSlot,
+}: SettingsViewProps) {
   const { data: me } = useMe();
   const name = displayName(me);
   const email = displayEmail(me);
@@ -48,6 +53,7 @@ export function SettingsView({ plan, planActionSlot }: SettingsViewProps) {
             plan={plan}
             planActionSlot={planActionSlot}
           />
+          {systemSlot ? <div className="mt-6">{systemSlot}</div> : null}
         </TabsPanel>
         <TabsPanel value="appearance" className="mt-6">
           <AppearancePanel />
