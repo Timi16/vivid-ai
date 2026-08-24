@@ -12,12 +12,19 @@ import { cn } from "@/lib/utils";
 
 interface AccountMenuProps {
   name: string;
+  avatarUrl?: string | null;
   plan: string;
   collapsed: boolean;
   onShowShortcuts: () => void;
 }
 
-export function AccountMenu({ name, plan, collapsed, onShowShortcuts }: AccountMenuProps) {
+export function AccountMenu({
+  name,
+  avatarUrl,
+  plan,
+  collapsed,
+  onShowShortcuts,
+}: AccountMenuProps) {
   const router = useRouter();
   const [signOutOpen, setSignOutOpen] = useState(false);
 
@@ -35,7 +42,7 @@ export function AccountMenu({ name, plan, collapsed, onShowShortcuts }: AccountM
               "hover:bg-fg/8 transition-colors"
             )}
           >
-            <Avatar name={name} size="sm" />
+            <Avatar name={name} src={avatarUrl} size="sm" />
             {!collapsed ? (
               <span className="flex min-w-0 flex-col items-start">
                 <span className="text-fg/85 truncate text-[13px] font-semibold">{name}</span>

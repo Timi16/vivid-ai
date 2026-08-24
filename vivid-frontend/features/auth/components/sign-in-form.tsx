@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,10 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { MailIcon } from "@/components/ui/icons";
 import { AuthCard } from "@/features/auth/components/auth-card";
+import { ProviderButton } from "@/features/auth/components/provider-buttons";
 import { validateEmail } from "@/features/auth/lib/validation";
 import { backend, setTokens } from "@/lib/backend/client";
+import { decaneConfigured, readGoogleReturn, startGoogleSignIn } from "@/lib/backend/decane";
 
 // Email + password against the live backend. One form serves both directions:
 // sign in by default, flip to create an account.
@@ -20,6 +22,52 @@ export function SignInForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [finishingGoogle, setFinishingGoogle] = useState(false);
+  const resumedRef = useRef(false);
+
+  // Google via Decane is a full-page redirect: Decane sends the browser back
+  // to this page (the callback URL in the dashboard) with ?decane_jwt=… in
+  // the query — the identity token itself. Exchange it for a Vivid session
+  // on mount. Identity only: no wallet, so no passkey prompt.
+  useEffect(() => {
+    if (resumedRef.current) return;
+    const returned = readGoogleReturn();
+    if (!returned) return;
+    resumedRef.current = true;
+    if ("error" in returned) {
+      setError(`Google sign-in failed: ${returned.error}`);
+      return;
+    }
+    setFinishingGoogle(true);
+    setSubmitting(true);
+    backend
+      .decaneLogin(returned.jwt, returned.profile)
+      .then((tokens) => {
+        setTokens(tokens);
+        router.push("/");
+      })
+      .catch((err: unknown) => {
+        setSubmitting(false);
+        setFinishingGoogle(false);
+        setError(err instanceof Error ? err.message : "Google sign-in failed");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function googleSignIn() {
+    if (!decaneConfigured) {
+      setError("Google sign-in isn't configured yet (set DECANE_APP_ID and DECANE_API_KEY).");
+      return;
+    }
+    setError(null);
+    setSubmitting(true);
+    try {
+      await startGoogleSignIn(); // navigates away; only rejects on failure
+    } catch (err) {
+      setSubmitting(false);
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
+    }
+  }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -59,6 +107,17 @@ export function SignInForm() {
         </>
       }
     >
+      {finishingGoogle ? (
+        <p className="text-fg/60 mb-4 text-center text-[13px]">Finishing Google sign-in…</p>
+      ) : null}
+      <ProviderButton provider="google" onClick={googleSignIn} disabled={submitting} />
+
+      <div className="my-5 flex items-center gap-3">
+        <span className="bg-fg/10 h-px flex-1" />
+        <span className="text-fg/35 text-[11.5px] font-medium tracking-wide uppercase">or</span>
+        <span className="bg-fg/10 h-px flex-1" />
+      </div>
+
       <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
         <Field htmlFor="email" label="Email" error={error ?? undefined}>
           <div className="relative">

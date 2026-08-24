@@ -13,6 +13,14 @@ class Settings(BaseSettings):
 
     # Auth
     JWT_SECRET: str = "change-me-in-prod"
+    # Decane Connect (handles "Continue with Google" — no Google Cloud
+    # registration needed). App/project id from the Decane dashboard; empty
+    # disables the social login endpoint.
+    DECANE_APP_ID: str = ""
+    # Optional ES256 public key (SPKI PEM) from the dashboard for offline
+    # verification; empty = fetch Decane's JWKS instead.
+    DECANE_VERIFICATION_KEY: str = ""
+    DECANE_API_BASE: str = "https://backend.decane.app"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30

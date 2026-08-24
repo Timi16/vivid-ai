@@ -7,6 +7,7 @@ import { AppearancePanel } from "@/features/settings/components/appearance-panel
 import { LanguagePanel } from "@/features/settings/components/language-panel";
 import { NotificationsPanel } from "@/features/settings/components/notifications-panel";
 import { ShortcutsPanel } from "@/features/settings/components/shortcuts-panel";
+import { displayEmail, displayName, useMe } from "@/features/auth/hooks/use-me";
 
 const TABS = [
   { value: "account", label: "Account" },
@@ -17,13 +18,14 @@ const TABS = [
 ];
 
 interface SettingsViewProps {
-  name: string;
-  email: string;
   plan: string;
   planActionSlot?: React.ReactNode;
 }
 
-export function SettingsView({ name, email, plan, planActionSlot }: SettingsViewProps) {
+export function SettingsView({ plan, planActionSlot }: SettingsViewProps) {
+  const { data: me } = useMe();
+  const name = displayName(me);
+  const email = displayEmail(me);
   return (
     <div className="mx-auto w-full max-w-[760px] px-5 py-8">
       <PageHeader title="Settings" />
@@ -39,7 +41,13 @@ export function SettingsView({ name, email, plan, planActionSlot }: SettingsView
         </TabsList>
 
         <TabsPanel value="account" className="mt-6">
-          <AccountPanel name={name} email={email} plan={plan} planActionSlot={planActionSlot} />
+          <AccountPanel
+            name={name}
+            email={email}
+            avatarUrl={me?.avatar_url}
+            plan={plan}
+            planActionSlot={planActionSlot}
+          />
         </TabsPanel>
         <TabsPanel value="appearance" className="mt-6">
           <AppearancePanel />

@@ -1,0 +1,82 @@
+{
+  "expo": {
+    "name": "Vivid",
+    "slug": "vivid-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "vivid",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "backgroundColor": "#000000",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.vivid.mobile",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Vivid listens when you dictate a message or start a voice call.",
+        "UIBackgroundModes": ["audio"]
+      }
+    },
+    "android": {
+      "package": "app.vivid.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["android.permission.RECORD_AUDIO"],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#000000",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Vivid listens when you dictate a message or start a voice call."
+        }
+      ],
+      [
+        "@siteed/audio-studio",
+        {
+          "enablePhoneStateHandling": false,
+          "enableNotifications": false,
+          "enableBackgroundAudio": false,
+          "enableDeviceDetection": false,
+          "iosConfig": {
+            "microphoneUsageDescription": "Vivid listens when you dictate a message or start a voice call."
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vivid uses your photos when you attach an image to a message."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Vivid uses Face ID to protect your Google sign-in on this device."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

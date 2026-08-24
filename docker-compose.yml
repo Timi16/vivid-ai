@@ -7,6 +7,8 @@ x-backend-env: &backend-env
   S3_SECRET_KEY: minioadmin
   S3_BUCKET: vivid
   JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+  DECANE_APP_ID: ${DECANE_APP_ID:-}
+  DECANE_VERIFICATION_KEY: ${DECANE_VERIFICATION_KEY:-}
   # RunPod model services — set these in a root .env (see .env.example)
   LLM_BASE_URL: ${LLM_BASE_URL:-}
   LLM_CONTEXT_TOKENS: ${LLM_CONTEXT_TOKENS:-8192}
@@ -97,7 +99,11 @@ services:
       retries: 5
 
   backend:
-    build: ./vivid-backend
+    build:
+      context: ./vivid-backend
+      # BuildKit's bridge network has flaked on this machine (PyPI DNS/timeouts);
+      # the host path is reliable.
+      network: host
     ports:
       - "8000:8000"
     environment:
@@ -144,6 +150,8 @@ services:
     environment:
       # Browser → backend directly (REST + the chat websocket)
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_DECANE_API_KEY=${DECANE_API_KEY:-}
+      - NEXT_PUBLIC_DECANE_APP_ID=${DECANE_APP_ID:-}
       # Server-side route handlers → backend inside the compose network
       - VIVID_API_BASE_URL=http://backend:8000
     depends_on:

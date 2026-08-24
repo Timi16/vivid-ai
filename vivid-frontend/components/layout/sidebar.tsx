@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { SidebarIcon } from "@/components/ui/icons";
 import { AccountMenu } from "@/components/layout/account-menu";
+import { displayName, useMe } from "@/features/auth/hooks/use-me";
 import { sidebarNav } from "@/components/layout/nav-items";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, onShowShortcuts }: SidebarProps) {
   const pathname = usePathname();
+  const { data: me } = useMe();
 
   return (
     <aside
@@ -65,7 +67,8 @@ export function Sidebar({ collapsed, onToggle, onShowShortcuts }: SidebarProps) 
 
       <div className="border-fg/8 border-t p-2">
         <AccountMenu
-          name="Guest"
+          name={displayName(me)}
+          avatarUrl={me?.avatar_url}
           plan="Free plan"
           collapsed={collapsed}
           onShowShortcuts={onShowShortcuts}
