@@ -44,27 +44,41 @@ def _planner_prompt(usable: dict) -> str:
         "Your training data is stale: any question about prices, rates, "
         "weather, news, dates or current events NEEDS a tool.\n"
         f"Available tools:\n{lines}\n\n"
+        "RULE: whenever the message involves code being run, demonstrated, "
+        "tested, or producing an output/result (calculations, conversions, "
+        "simulations, \"show the output\"), you MUST call run_code with the "
+        "complete program — program output must never be guessed.\n"
+        "RULE: converting or processing an attached file (image→PDF, "
+        "CSV analysis, resizing…) = run_code reading the attached filename "
+        "and writing the new file. But UNDERSTANDING an image — describing "
+        "it, reading text in it, solving a question shown in it — needs NO "
+        "tool: the model sees the image directly. Never attempt OCR "
+        "(pytesseract etc.) on an attached image.\n"
         'Reply with ONLY JSON, no prose: {"calls": [{"tool": "<name>", '
         '"args": {...}}]} — use {"calls": []} when no tool is needed '
         "(opinions, chit-chat, general knowledge that does not change)."
     )
 
 
-async def gather_context(text: str, history, status_cb,
+async def gather_context(text: str, history, ctx,
                          allowed_tools: list[str] | None = None,
-                         chat_id: str | None = None,
                          extra_tools: dict | None = None) -> tuple[str, bool]:
     """Returns (extra_system_prompt, used_tools). Raises nothing — a broken
     planner or tool degrades to answering without observations.
+    ctx is the turn's ToolContext (status callback, chat id, attached files);
     allowed_tools comes from the client's config (B2B hook); None = all.
     extra_tools are the user's connector-bound tools for this turn."""
+    status_cb = ctx.status
     usable = {**tools.available(allowed_tools), **(extra_tools or {})}
-    ctx = tools.ToolContext(chat_id=chat_id, status=status_cb)
     if not usable:
         return "", False
     recent = "\n".join(f"{m.role}: {m.content[:200]}" for m in list(history)[:4][::-1])
     user = (f"Recent conversation:\n{recent}\n\nNew message: {text}"
             if recent else text)
+    if ctx.files:
+        listing = ", ".join(f"{f['name']} ({f['mime']})" for f in ctx.files)
+        user += (f"\n\nAttached files (available to run_code in its working "
+                 f"directory by filename): {listing}")
     try:
         # run_code puts whole programs in the args JSON — give it room
         raw = await llm.complete(
@@ -95,5 +109,7 @@ async def gather_context(text: str, history, status_cb,
              + "\n\nThe work above is ALREADY DONE. Answer with the result in "
              "plain sentences — for example \"The answer is 75025.\" Do NOT "
              "write, repeat or explain code unless the user explicitly asked "
-             "to see the code itself.\n")
+             "to see the code itself. Never reproduce this block, the "
+             "[bracketed] tool names, or the words 'output:' verbatim — the "
+             "user must not see raw tool internals.\n")
     return extra, True

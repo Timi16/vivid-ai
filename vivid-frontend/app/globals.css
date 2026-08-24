@@ -1,0 +1,575 @@
+/* source(none) disables Tailwind's automatic content detection, which otherwise
+   walks up to a mis-inferred workspace root and scans foreign trees. Scan only
+   this app's own source instead.
+
+   Every directory holding markup must be listed below. A class used only in an
+   unlisted directory is silently dropped from the stylesheet: no error, no
+   warning, just an unstyled component. */
+@import "tailwindcss" source(none);
+@source "../app";
+@source "../components";
+@source "../features";
+@source "../lib";
+@source "../hooks";
+
+/* Design tokens are shared with the Worldstreet frontend so the two apps read
+   the same way. Keep the token names identical: a component moved between the
+   repos should not need its classes rewritten. */
+@theme inline {
+  --font-sans: var(--font-body);
+  /* Header font. Kept under the --font-serif token (and the ws-display utility)
+     to match the sibling repo, but it is Mona Sans, a sans display face. */
+  --font-serif: var(--font-display);
+
+  /* The brand is monochrome: no purple, no gold. The accent is silver, so
+     text-accent and the accent tints read as light neutral washes on black. */
+  --color-accent: #d4d4d8;
+  /* Positive and negative stay semantic (functional, not brand color). */
+  --color-up: #7ce7b0;
+  --color-up-ink: #04241a;
+  --color-down: #f6a5a5;
+  --color-down-ink: #2a0e0e;
+  /* Dark text on light (silver/white) buttons. */
+  --color-ink: #0a0a0a;
+  /* Small directional glyphs. */
+  --color-arrow: #8a8a8f;
+  --color-panel: #0a0a0a;
+  --color-sheet: #0c0c0e;
+
+  /* Designer greyscale scale. Neutral steps for text, borders, and surfaces.
+     Token names mirror the design file's grey/20..100. */
+  --color-grey-100: #f4f4f4;
+  --color-grey-200: #dcdcdc;
+  --color-grey-300: #bfbfbf;
+  --color-grey-400: #9b9b9b;
+  --color-grey-500: #7a7a7a;
+  --color-grey-600: #5a5a5a;
+  --color-grey-700: #3c3c3c;
+  --color-grey-800: #1c1c1c;
+  --color-grey-900: #0f0f0f;
+
+  /* Semantic tokens used by the shadcn-style primitives, mapped to this app's
+     dark palette so those components render without a separate token layer. */
+  --color-primary: #e8e8ea;
+  --color-primary-foreground: #0a0a0a;
+  --color-foreground: #ededed;
+  --color-background: #fafafa;
+  --color-input: #33333a;
+  --color-ring: #d4d4d8;
+  --color-destructive: #ef4444;
+}
+
+/* Foreground, its inverse, and the page beneath the glass.
+   Components use these (text-fg, bg-fg/10, border-fg/12, ring-page) rather than
+   text-white or bg-black, so a theme swap moves the type with the surfaces
+   instead of leaving white text on a white card.
+
+   Deliberately NOT in the `@theme inline` block above. `inline` substitutes the
+   literal value into every utility, which compiles `.text-fg` to `color: #fff`
+   and makes the value impossible to override at runtime. A plain `@theme`
+   emits `color: var(--color-fg)`, so the light block below can move it. */
+@theme {
+  --color-fg: #ffffff;
+  --color-fg-invert: #0a0a0a;
+  --color-page: #000000;
+}
+
+body {
+  background: #000;
+  color: #fff;
+  font-family: var(--font-sans), sans-serif;
+  /* Normal text runs in Geist medium, not the lighter default weight.
+     Component classes still override where a different weight is wanted. */
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+
+::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+@utility ws-display {
+  font-family: var(--font-serif), sans-serif;
+  /* Mona Sans at bold. Component tracking utilities still override the
+     letter-spacing where a title needs it tighter. */
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+@utility ws-card {
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+@utility ws-inset {
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Invalid-input state for ws-inset field containers. !important because
+   ws-inset sets border-color through its border shorthand and utility order
+   is not guaranteed to favour this one. */
+@utility ws-invalid {
+  border-color: rgba(246, 165, 165, 0.55) !important;
+}
+
+@utility ws-glass {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+   WATER GLASS
+   ---------------------------------------------------------------------------
+   Every button, card, menu and sheet in this app is the same material at a
+   different weight. What changes between tiers is blur depth, corner radius,
+   and how far the surface floats off the background.
+
+   Three things make a surface read as wet glass rather than as a grey box:
+
+   1. saturate() in the backdrop filter. Colour behind the surface bleeds
+      through and intensifies instead of going flat grey. This is the single
+      biggest contributor, and it is what most glassmorphism misses.
+   2. A bright inset line along the top edge, with a fainter one along the
+      bottom. That pair is the specular hit that reads as a lit rim.
+   3. A soft ambient shadow underneath, so the surface floats rather than sits.
+
+   The palette these are built from is shared with the Worldstreet frontend.
+   The material is not: `ws-glass` above is that repo's flatter treatment, kept
+   unchanged so a component copied from it still renders correctly. The
+   `vd-glass-*` family below is Vivid's own, and is what this app builds with.
+   ------------------------------------------------------------------------ */
+
+/* Base material. Use a tier below unless you are building a new kind of
+   surface, so blur depth stays consistent per weight. */
+@utility vd-glass {
+  position: relative;
+  background-color: rgba(255, 255, 255, 0.065);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.085) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    0 8px 28px rgba(0, 0, 0, 0.42);
+
+  /* Where the backdrop filter is unavailable the surface would otherwise be a
+     nearly transparent wash over whatever sits behind it, which is unreadable.
+     Fall back to a near-solid panel. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: rgba(23, 23, 26, 0.94);
+  }
+
+  /* Some people turn transparency off at the OS level, usually because moving
+     blur behind text is hard to read. Honour it. */
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: rgba(23, 23, 26, 0.96);
+    backdrop-filter: none;
+  }
+}
+
+/* Control weight: buttons, chips, pills, inputs. Shallower blur, because a
+   control is small and a deep blur on a small surface just looks muddy. */
+@utility vd-glass-control {
+  position: relative;
+  background-color: rgba(255, 255, 255, 0.08);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  backdrop-filter: blur(12px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    0 2px 10px rgba(0, 0, 0, 0.3);
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: rgba(30, 30, 34, 0.94);
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: rgba(30, 30, 34, 0.96);
+    backdrop-filter: none;
+  }
+}
+
+/* Card weight: panels, tiles, list rows, the composer. */
+@utility vd-glass-card {
+  position: relative;
+  border-radius: 22px;
+  background-color: rgba(255, 255, 255, 0.055);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.075) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    0 10px 34px rgba(0, 0, 0, 0.45);
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: rgba(23, 23, 26, 0.94);
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: rgba(23, 23, 26, 0.96);
+    backdrop-filter: none;
+  }
+}
+
+/* Sheet weight: modals, menus, popovers, drawers. The heaviest blur, because
+   these sit over arbitrary content and have to stay readable regardless of it. */
+@utility vd-glass-sheet {
+  position: relative;
+  background-color: rgba(255, 255, 255, 0.075);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    0 24px 70px rgba(0, 0, 0, 0.66);
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: rgba(18, 18, 21, 0.97);
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: rgba(18, 18, 21, 0.98);
+    backdrop-filter: none;
+  }
+}
+
+/* An inset well: search fields and code blocks, where the surface should read
+   as cut into the glass rather than floating on it. Inverts the highlight. */
+/* The primary action. Bright enough to lead the page while still carrying the
+   material, so it reads as lit glass rather than as a painted white pill.
+
+   This is a tier rather than a `bg-white` composed onto vd-glass-control,
+   because both would be setting background-color in the same layer and the
+   winner would come down to stylesheet order. Declaring it once removes the
+   ambiguity. */
+@utility vd-glass-bright {
+  position: relative;
+  background-color: rgba(255, 255, 255, 0.9);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  backdrop-filter: blur(12px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 2px 14px rgba(0, 0, 0, 0.38);
+  color: var(--color-ink);
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 1),
+      0 4px 18px rgba(0, 0, 0, 0.45);
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    backdrop-filter: none;
+  }
+}
+
+@utility vd-glass-well {
+  position: relative;
+  background-color: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: rgba(12, 12, 14, 0.96);
+    backdrop-filter: none;
+  }
+}
+
+/* The specular streak across the top of a surface. Applied as a pseudo-element
+   so it never interferes with layout or clicks. Pair with a glass tier; it
+   inherits the radius, so it works on a pill and on a card alike. */
+@utility vd-sheen {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.14) 0%,
+      rgba(255, 255, 255, 0.02) 42%,
+      transparent 60%
+    );
+  }
+}
+
+/* Hover lift for interactive glass. Kept as a utility so a card and a button
+   brighten by the same amount. */
+@utility vd-glass-hover {
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.26);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+      0 12px 38px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   LIGHT THEME
+   ---------------------------------------------------------------------------
+   Built from the same greyscale as the dark theme rather than from a second
+   palette: grey-100..900 run the other way, and the glass tiers invert from
+   white-on-dark to dark-on-light. Nothing new is introduced, so the two themes
+   cannot drift apart.
+
+   Selected by data-theme="light" on the root, which the appearance setting
+   sets. The default with no attribute is dark, because that is the brand.
+   ------------------------------------------------------------------------ */
+:root[data-theme="light"] {
+  --color-accent: #52525b;
+  --color-ink: #fafafa;
+  --color-arrow: #6b6b72;
+  --color-panel: #f7f7f8;
+  --color-sheet: #ffffff;
+
+  --color-up: #0f7a4f;
+  --color-up-ink: #eafff4;
+  --color-down: #b3261e;
+  --color-down-ink: #fff1f0;
+
+  --color-primary: #18181b;
+  --color-primary-foreground: #fafafa;
+  --color-foreground: #18181b;
+  --color-background: #ffffff;
+  --color-input: #d4d4d8;
+  --color-ring: #52525b;
+
+  --color-fg: #18181b;
+  --color-fg-invert: #fafafa;
+  --color-page: #f2f2f4;
+}
+
+:root[data-theme="light"] body {
+  background: #f2f2f4;
+  color: #18181b;
+}
+
+:root[data-theme="light"] ::selection {
+  background: rgba(0, 0, 0, 0.18);
+  color: #18181b;
+}
+
+:root[data-theme="light"] ::placeholder {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+/* The glass inverts: a dark tint over a light page, with the specular line
+   still along the top edge. The blur and saturation are unchanged, because
+   those are what make it glass rather than a tinted box. */
+:root[data-theme="light"] {
+  .vd-glass,
+  .vd-glass-control,
+  .vd-glass-card,
+  .vd-glass-sheet {
+    background-color: rgba(255, 255, 255, 0.72);
+    background-image: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.9) 0%,
+      rgba(255, 255, 255, 0.35) 100%
+    );
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .vd-glass {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 8px 28px rgba(0, 0, 0, 0.1);
+  }
+
+  .vd-glass-control {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      0 2px 10px rgba(0, 0, 0, 0.08);
+  }
+
+  .vd-glass-card {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 10px 34px rgba(0, 0, 0, 0.1);
+  }
+
+  .vd-glass-sheet {
+    background-color: rgba(255, 255, 255, 0.86);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 1),
+      0 24px 70px rgba(0, 0, 0, 0.22);
+  }
+
+  .vd-glass-bright {
+    background-color: rgba(24, 24, 27, 0.94);
+    background-image: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    border-color: rgba(0, 0, 0, 0.5);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      0 2px 14px rgba(0, 0, 0, 0.2);
+    color: #fafafa;
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 1);
+    }
+  }
+
+  .vd-glass-well {
+    background-color: rgba(0, 0, 0, 0.045);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow:
+      inset 0 1px 2px rgba(0, 0, 0, 0.08),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .vd-sheen::before {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.5) 0%,
+      rgba(255, 255, 255, 0.08) 42%,
+      transparent 60%
+    );
+  }
+
+  .vd-glass-hover:hover {
+    border-color: rgba(0, 0, 0, 0.2);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 1),
+      0 12px 38px rgba(0, 0, 0, 0.14);
+  }
+}
+
+/* The light behind the glass. Inverts with the theme: bright pools on black,
+   soft shadow pools on the light page. */
+@utility vd-ambient {
+  background-image:
+    radial-gradient(
+      72% 58% at 50% 16%,
+      rgba(255, 255, 255, 0.24),
+      rgba(255, 255, 255, 0.07) 44%,
+      transparent 74%
+    ),
+    radial-gradient(44% 52% at 0% 36%, rgba(202, 214, 240, 0.2), transparent 70%),
+    radial-gradient(48% 50% at 100% 86%, rgba(242, 235, 224, 0.16), transparent 72%),
+    radial-gradient(76% 30% at 50% 100%, rgba(255, 255, 255, 0.08), transparent 76%),
+    radial-gradient(140% 105% at 50% 14%, transparent 60%, rgba(0, 0, 0, 0.38) 100%);
+}
+
+:root[data-theme="light"] .vd-ambient {
+  background-image:
+    radial-gradient(
+      72% 58% at 50% 16%,
+      rgba(255, 255, 255, 0.9),
+      rgba(255, 255, 255, 0.4) 44%,
+      transparent 74%
+    ),
+    radial-gradient(44% 52% at 0% 36%, rgba(140, 158, 196, 0.16), transparent 70%),
+    radial-gradient(48% 50% at 100% 86%, rgba(186, 170, 148, 0.14), transparent 72%),
+    radial-gradient(76% 30% at 50% 100%, rgba(0, 0, 0, 0.05), transparent 76%),
+    radial-gradient(140% 105% at 50% 14%, transparent 62%, rgba(0, 0, 0, 0.09) 100%);
+}
+
+/* ---- assistant markdown (.vd-md) — rendered by features/chat/markdown ---- */
+.vd-md > *:first-child { margin-top: 0; }
+.vd-md > *:last-child { margin-bottom: 0; }
+.vd-md p, .vd-md ul, .vd-md ol, .vd-md table, .vd-md blockquote { margin: 10px 0; }
+.vd-md ul, .vd-md ol { padding-left: 22px; }
+.vd-md ul { list-style: disc; }
+.vd-md ol { list-style: decimal; }
+.vd-md li { margin: 4px 0; }
+.vd-md code {
+  background: color-mix(in srgb, var(--color-fg) 8%, transparent);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 13px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.vd-md pre {
+  background: color-mix(in srgb, var(--color-fg) 92%, transparent);
+  color: var(--color-fg-invert);
+  padding: 14px 16px;
+  border-radius: 12px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.vd-md pre code { background: none; padding: 0; color: inherit; }
+.vd-md table { border-collapse: collapse; font-size: 14px; }
+.vd-md th, .vd-md td {
+  border: 1px solid color-mix(in srgb, var(--color-fg) 15%, transparent);
+  padding: 6px 12px;
+}
+.vd-md blockquote {
+  border-left: 3px solid color-mix(in srgb, var(--color-fg) 25%, transparent);
+  padding-left: 14px;
+  opacity: 0.85;
+}
+.vd-md h1, .vd-md h2, .vd-md h3 { margin: 14px 0 6px; font-weight: 600; font-size: 16px; }
+.vd-md a { text-decoration: underline; text-underline-offset: 2px; }

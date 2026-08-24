@@ -2,7 +2,8 @@
 
 client -> server:
   {type: "message", chat_id, text, attachment_ids[], language}
-  {type: "audio_start", chat_id, language, voice?, mime?}
+  {type: "audio_start", chat_id, language, voice?, mime?, dictate?}
+    dictate: true streams rolling partial transcripts back while recording
   binary frames (or {type: "audio_chunk", data: <base64>}) — mic audio
   {type: "audio_end", chat_id}
   {type: "cancel", chat_id}
@@ -57,9 +58,16 @@ async def ws_endpoint(ws: WebSocket):
     audio_chat = audio_lang = audio_voice = None
     audio_mime = "audio/webm"
     buf = bytearray()
+    live_task: asyncio.Task | None = None
 
     def busy() -> bool:
         return gen_task is not None and not gen_task.done()
+
+    def stop_live_transcribe() -> None:
+        nonlocal live_task
+        if live_task is not None:
+            live_task.cancel()
+            live_task = None
 
     async def supersede() -> bool:
         """A new request replaces an in-flight turn — the stale answer must
@@ -104,6 +112,7 @@ async def ws_endpoint(ws: WebSocket):
                     continue
                 buf.extend(msg["bytes"])
                 if len(buf) > MAX_AUDIO_BYTES:
+                    stop_live_transcribe()
                     buf = bytearray()
                     audio_chat = None
                     await conn.send({"type": "error", "code": "audio_too_large",
@@ -138,11 +147,20 @@ async def ws_endpoint(ws: WebSocket):
                     cancel_event=gen_cancel))
 
             elif mtype == "audio_start":
+                stop_live_transcribe()
                 audio_chat = chat_id
                 audio_lang = data.get("language")
                 audio_voice = data.get("voice")
                 audio_mime = data.get("mime") or "audio/webm"
                 buf = bytearray()
+                if data.get("dictate"):
+                    # `buf` is read through the lambda so the task always sees
+                    # the audio captured so far, chunk by chunk.
+                    live_task = asyncio.create_task(
+                        chat_pipeline.run_live_transcribe(
+                            conn, state, user_id, chat_id,
+                            lambda: bytes(buf),
+                            language=audio_lang, mime=audio_mime))
 
             elif mtype == "audio_chunk":
                 # JSON fallback for clients that can't send binary frames
@@ -155,6 +173,21 @@ async def ws_endpoint(ws: WebSocket):
                                      "message": "audio_chunk data must be base64"})
 
             elif mtype == "audio_end":
+                stop_live_transcribe()
+                # transcribe_only: speech-to-text as an editable draft — no
+                # turn runs, so it never competes with a generation.
+                if data.get("transcribe_only"):
+                    if audio_chat is None or len(buf) < MIN_AUDIO_BYTES:
+                        await conn.send({"type": "error", "chat_id": audio_chat,
+                                         "code": "no_audio",
+                                         "message": "no audio received"})
+                        continue
+                    asyncio.create_task(chat_pipeline.run_transcribe_only(
+                        conn, state, user_id, audio_chat, bytes(buf),
+                        language=audio_lang, mime=audio_mime))
+                    buf = bytearray()
+                    audio_chat = None
+                    continue
                 if not await supersede():
                     await conn.send({"type": "error", "chat_id": audio_chat,
                                      "code": "busy",
@@ -191,5 +224,7 @@ async def ws_endpoint(ws: WebSocket):
         pass
     finally:
         # The generation task is deliberately NOT cancelled: it finishes and
-        # saves, so the user sees the reply on reload (spec 3.4).
+        # saves, so the user sees the reply on reload (spec 3.4). Live
+        # transcription serves only the open mic, so it dies with the socket.
+        stop_live_transcribe()
         conn.alive = False

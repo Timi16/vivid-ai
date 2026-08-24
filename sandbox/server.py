@@ -10,8 +10,10 @@ Defense layers (this process is assumed hostile):
 
 Stdlib only — no pip packages — to keep the attack surface tiny.
 """
+import base64
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -22,12 +24,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MAX_OUTPUT = 20_000
 MAX_TIMEOUT = 30
-MAX_BODY = 200_000
+MAX_BODY = 40_000_000  # input files ride along as base64
+MAX_INPUT_FILES = 8
+MAX_OUTPUT_FILES = 3
+MAX_OUTPUT_BYTES = 8_000_000
+
+_SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]")
 
 
 def set_limits():
     import resource
-    resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024,) * 2)
+    # 1.5GB virtual: OpenBLAS (numpy) pre-allocates large address space even
+    # for tiny arrays; resident memory stays capped by the container.
+    resource.setrlimit(resource.RLIMIT_AS, (1536 * 1024 * 1024,) * 2)
     resource.setrlimit(resource.RLIMIT_CPU, (MAX_TIMEOUT, MAX_TIMEOUT))
     resource.setrlimit(resource.RLIMIT_FSIZE, (5 * 1024 * 1024,) * 2)
     try:
@@ -70,6 +79,17 @@ class Handler(BaseHTTPRequestHandler):
         timeout = max(1, min(int(body.get("timeout") or 10), MAX_TIMEOUT))
 
         workdir = tempfile.mkdtemp(prefix="run-")
+        # Input files (e.g. the user's attachments) land in the working
+        # directory by name; anything the program CREATES there comes back.
+        for raw_name, b64 in list((body.get("files") or {}).items())[:MAX_INPUT_FILES]:
+            name = _SAFE_NAME.sub("_", os.path.basename(str(raw_name)))[:100] or "file"
+            try:
+                with open(os.path.join(workdir, name), "wb") as f:
+                    f.write(base64.b64decode(b64))
+            except Exception:
+                continue
+        before = set(os.listdir(workdir))
+
         started = time.monotonic()
         timed_out = False
         try:
@@ -77,7 +97,11 @@ class Handler(BaseHTTPRequestHandler):
                 [sys.executable, "-I", "-c", code],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 cwd=workdir,
-                env={"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": workdir},
+                env={"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": workdir,
+                     # single-threaded BLAS: hugely less virtual memory, and
+                     # the cpu quota is 1 core anyway
+                     "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1",
+                     "MKL_NUM_THREADS": "1"},
                 start_new_session=True,
                 preexec_fn=set_limits)
             try:
@@ -89,6 +113,20 @@ class Handler(BaseHTTPRequestHandler):
                 except ProcessLookupError:
                     pass
                 out, err = proc.communicate()
+
+            # New files the program created come back to the caller.
+            outputs = {}
+            try:
+                for name in sorted(os.listdir(workdir)):
+                    if name in before or len(outputs) >= MAX_OUTPUT_FILES:
+                        continue
+                    path = os.path.join(workdir, name)
+                    if not os.path.isfile(path) or os.path.getsize(path) > MAX_OUTPUT_BYTES:
+                        continue
+                    with open(path, "rb") as f:
+                        outputs[name] = base64.b64encode(f.read()).decode()
+            except Exception:
+                pass
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
 
@@ -98,6 +136,7 @@ class Handler(BaseHTTPRequestHandler):
             "duration_ms": int((time.monotonic() - started) * 1000),
             "stdout": out.decode(errors="replace")[:MAX_OUTPUT],
             "stderr": err.decode(errors="replace")[:MAX_OUTPUT],
+            "files": outputs,
         })
 
 

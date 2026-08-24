@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The job only reads the repository and runs checks. Nothing it does needs a
+# writable token, so do not hand it one.
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: vivid-frontend
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: vivid-frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Next reuses this between runs for compilation and type information.
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: vivid-frontend/.next/cache
+          key: next-${{ hashFiles('vivid-frontend/pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            next-${{ hashFiles('vivid-frontend/pnpm-lock.yaml') }}-
+
+      - name: Prettier (format check)
+        run: pnpm format:check
+
+      - name: ESLint
+        run: pnpm lint
+
+      # `next build` only typechecks what the build graph reaches. This covers
+      # tests, unreferenced modules, and anything the bundler tree-shakes out.
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

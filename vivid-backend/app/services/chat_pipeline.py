@@ -32,6 +32,7 @@ from app.db.models import Attachment, Chat, Client, Connector, Message
 from app.db.session import async_session
 from app.services import agent, prompt, rate_limit, storage
 from app.services import connectors as connectors_svc
+from app.services import tools as tools_svc
 from app.services.models_gateway import llm, stt, translate as translate_svc, tts
 
 log = logging.getLogger("vivid.pipeline")
@@ -41,6 +42,10 @@ log = logging.getLogger("vivid.pipeline")
 # playback seconds earlier. (Ported from the pod pipeline.)
 _SENT_SPLIT = re.compile(r"(?<=[.!?:;])\s+|(?<=,)\s+(?=\w)")
 MIN_CHUNK_CHARS = 25  # don't synthesise "Yes," as its own clip
+# ...except the very FIRST clause of a reply: speech starting ~a second sooner
+# beats a slightly choppier opening ("I'm doing well," starts playing while
+# the rest generates).
+MIN_FIRST_CHUNK_CHARS = 12
 
 
 class Connection:
@@ -98,7 +103,8 @@ async def run_text_turn(conn: Connection, state, user_id: str, chat_id: str,
                         text: str, attachment_ids: list[str] | None = None,
                         language: str | None = None, voice_reply: bool = False,
                         voice: str | None = None,
-                        cancel_event=None) -> None:
+                        cancel_event=None,
+                        timings: dict | None = None) -> None:
     started = time.monotonic()
     text = (text or "").strip()
     if not chat_id:
@@ -116,14 +122,24 @@ async def run_text_turn(conn: Connection, state, user_id: str, chat_id: str,
     try:
         await _run_text_turn(conn, state, user_id, chat_id, text,
                              attachment_ids or [], language, voice_reply,
-                             voice, started, cancel_event)
+                             voice, started, cancel_event,
+                             timings if timings is not None else {})
     finally:
         await rate_limit.release_generation(redis, user_id)
 
 
 async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
                          language, voice_reply, voice, started,
-                         cancel_event=None):
+                         cancel_event=None, timings=None):
+    # Per-stage latency accounting: where a slow turn actually spent its time.
+    if timings is None:
+        timings = {}
+    mark = time.monotonic()
+
+    def _stamp(key: str) -> None:
+        nonlocal mark
+        timings[key] = round((time.monotonic() - mark) * 1000)
+        mark = time.monotonic()
     # --- save the user message and load history ---
     async with async_session() as db:
         chat = await db.get(Chat, chat_id)
@@ -178,20 +194,83 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
             except Exception as e:
                 log.warning("could not load image attachment %s: %s", a.id, e)
 
+    # Follow-ups about "the image" must SEE it: when this message has no
+    # image of its own, re-attach the chat's latest one — but only while it
+    # is recent (spec 3.5: images from the last N turns only; they are
+    # expensive in context, and a stale photo pinned to every later question
+    # would confuse more than it helps).
+    if not image_urls:
+        async with async_session() as db:
+            last_img = (await db.execute(
+                select(Attachment)
+                .where(Attachment.chat_id == chat_id, Attachment.kind == "image")
+                .order_by(Attachment.created_at.desc()).limit(1)
+            )).scalars().first()
+            if last_img is not None:
+                since = (await db.execute(
+                    select(Message.id).where(
+                        Message.chat_id == chat_id,
+                        Message.created_at > last_img.created_at)
+                )).scalars().all()
+                if len(since) <= 8:
+                    try:
+                        data = await storage.download(last_img.storage_key)
+                        image_urls.append(
+                            f"data:{last_img.mime};base64,"
+                            f"{base64.b64encode(data).decode()}")
+                    except Exception as e:
+                        log.warning("could not load recent image %s: %s",
+                                    last_img.id, e)
+
     # --- tool loop (backend-side; the LLM endpoint knows nothing about tools) ---
+    async def _status(label: str):
+        await conn.send({"type": "tool_status", "chat_id": chat_id,
+                         "text": label})
+
+    # The chat's uploads ride into run_code's working directory so programs
+    # can convert/process them (image→PDF, CSV analysis, …). Not just the
+    # current message's: "now convert that to a PDF" as a follow-up must find
+    # the image from three turns ago. Current-message files first, then the
+    # chat's most recent uploads, within a size budget.
+    tool_ctx = tools_svc.ToolContext(chat_id=chat_id, status=_status)
     used_tools = False
     if (settings.TOOLS_ENABLED and language not in set(settings.NO_TOOLS_LANGS)
-            and agent.wants_tools(text) and not image_urls):
-        async def _status(label: str):
-            await conn.send({"type": "tool_status", "chat_id": chat_id,
-                             "text": label})
+            and agent.wants_tools(text)):
+        async with async_session() as db:
+            recent = list((await db.execute(
+                select(Attachment)
+                .where(Attachment.chat_id == chat_id,
+                       Attachment.kind.in_(("image", "file")))
+                .order_by(Attachment.created_at.desc())
+                .limit(6)
+            )).scalars())
+        current_ids = {a.id for a in atts}
+        candidates = ([a for a in atts if a.kind in ("image", "file")]
+                      + [a for a in recent if a.id not in current_ids])
+        total = 0
+        seen_names: set[str] = set()
+        for a in candidates:
+            name = a.filename or "file"
+            if not a.storage_key or name in seen_names:
+                continue
+            try:
+                data = await storage.download(a.storage_key)
+            except Exception as e:
+                log.warning("could not load attachment %s for tools: %s", a.id, e)
+                continue
+            if total + len(data) > 15_000_000:
+                break
+            total += len(data)
+            seen_names.add(name)
+            tool_ctx.files.append({"name": name, "mime": a.mime, "data": data})
+
         client_tools = ((client_row.config_json or {}).get("tools")
                         if client_row else None)
         extra, used_tools = await agent.gather_context(
-            text, history, _status, allowed_tools=client_tools,
-            chat_id=chat_id,
+            text, history, tool_ctx, allowed_tools=client_tools,
             extra_tools=connectors_svc.tools_for(user_connectors))
         system_prompt += extra
+    _stamp("tools_ms")
 
     if _superseded(cancel_event):
         return await conn.send({"type": "done", "chat_id": chat_id,
@@ -227,6 +306,9 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
                     await conn.send({"type": "audio_chunk", "chat_id": chat_id,
                                      "mime": "audio/wav",
                                      "data": base64.b64encode(wav).decode()})
+                    if "first_audio_ms" not in timings:
+                        timings["first_audio_ms"] = round(
+                            (time.monotonic() - started) * 1000)
                 except Exception as e:
                     log.warning("streamed tts chunk failed: %s", e)
 
@@ -256,6 +338,9 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
                 cancelled = True
                 break
             if ev["type"] == "token":
+                if "first_token_ms" not in timings:
+                    timings["first_token_ms"] = round(
+                        (time.monotonic() - started) * 1000)
                 parts.append(ev["text"])
                 await conn.send({"type": "token", "chat_id": chat_id,
                                  "text": ev["text"]})
@@ -264,8 +349,10 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
                     # Find the earliest boundary that yields a chunk worth
                     # speaking; an early comma must not block a later split.
                     while True:
+                        min_chars = (MIN_FIRST_CHUNK_CHARS if not audio_parts
+                                     and speak_q.empty() else MIN_CHUNK_CHARS)
                         m = _SENT_SPLIT.search(pending)
-                        while m and len(pending[:m.end()].strip()) < MIN_CHUNK_CHARS:
+                        while m and len(pending[:m.end()].strip()) < min_chars:
                             m = _SENT_SPLIT.search(pending, m.end())
                         if not m:
                             break
@@ -347,7 +434,9 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
         translated = reply != reply_src
 
     # --- save the assistant message ---
+    _stamp("llm_ms")
     latency_ms = int((time.monotonic() - started) * 1000)
+    timings["total_ms"] = latency_ms
     async with async_session() as db:
         assistant_msg = Message(
             chat_id=chat_id, role="assistant", content=reply,
@@ -362,9 +451,32 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
         await db.commit()
         assistant_msg_id = assistant_msg.id
 
-    log.info("turn user=%s chat=%s lang=%s tools=%s latency_ms=%s tokens_in=%s tokens_out=%s",
+    log.info("turn user=%s chat=%s lang=%s tools=%s latency_ms=%s tokens_in=%s tokens_out=%s timings=%s",
              user_id, chat_id, language, used_tools, latency_ms,
-             (usage or {}).get("prompt_tokens"), (usage or {}).get("completion_tokens"))
+             (usage or {}).get("prompt_tokens"), (usage or {}).get("completion_tokens"),
+             timings)
+
+    # --- files created by tools become attachments on the reply ---
+    out_attachments: list[dict] = []
+    for out in tool_ctx.outputs[:3]:
+        try:
+            key = f"{user_id}/{chat_id}/{uuid.uuid4()}-{out['name']}"
+            await storage.upload(key, out["data"], out["mime"])
+            async with async_session() as db:
+                att = Attachment(
+                    message_id=assistant_msg_id, chat_id=chat_id,
+                    user_id=user_id,
+                    kind="image" if out["mime"].startswith("image/") else "file",
+                    filename=out["name"], storage_key=key, mime=out["mime"],
+                    size_bytes=len(out["data"]))
+                db.add(att)
+                await db.commit()
+                out_attachments.append({
+                    "id": att.id, "kind": att.kind, "filename": out["name"],
+                    "mime": out["mime"], "size_bytes": len(out["data"]),
+                    "url": storage.presigned_url(key)})
+        except Exception as e:
+            log.warning("could not store tool output %s: %s", out.get("name"), e)
 
     # --- voice reply audio ---
     reply_wav = None
@@ -402,9 +514,9 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
     await conn.send({"type": "done", "chat_id": chat_id,
                      "message_id": assistant_msg_id, "cancelled": cancelled,
                      "translated": translated, "used_tools": used_tools,
-                     "text": reply,
+                     "text": reply, "attachments": out_attachments,
                      "source_text": reply_src if translated else None,
-                     "usage": usage})
+                     "usage": usage, "timings": timings})
 
     # --- background jobs ---
     arq = getattr(state, "arq", None)
@@ -416,6 +528,82 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
                 await arq.enqueue_job("generate_chat_title", chat_id)
         except Exception as e:
             log.warning("could not enqueue background jobs: %s", e)
+
+
+LIVE_TRANSCRIBE_INTERVAL = 2.0
+LIVE_TRANSCRIBE_MIN_NEW_BYTES = 16000  # half a second of 16 kHz s16le
+
+
+async def run_live_transcribe(conn: Connection, state, user_id: str,
+                              chat_id: str, get_audio,
+                              language: str | None = None,
+                              mime: str = "audio/webm") -> None:
+    """Rolling draft transcripts while the composer mic is open: every couple
+    of seconds the audio captured so far is transcribed and pushed as a
+    partial draft, so words appear while the user is still talking. Partials
+    are best-effort — the authoritative pass is run_transcribe_only on
+    audio_end, which also owns error reporting. The handler cancels this task
+    the moment the mic closes."""
+    async with async_session() as db:
+        chat = await db.get(Chat, chat_id)
+        if chat is None or chat.user_id != user_id:
+            return
+        requested = language or chat.language or "en"
+
+    last_len = 0
+    while True:
+        await asyncio.sleep(LIVE_TRANSCRIBE_INTERVAL)
+        audio = get_audio()
+        # Wait for enough NEW audio that the pod call buys fresh words; a
+        # quiet stretch just skips the tick.
+        if len(audio) - last_len < LIVE_TRANSCRIBE_MIN_NEW_BYTES:
+            continue
+        last_len = len(audio)
+        send_mime = mime
+        if mime.startswith("audio/pcm"):
+            audio = _pcm16k_to_wav(audio)
+            send_mime = "audio/wav"
+        try:
+            transcript, detected = await stt.transcribe(audio, requested, send_mime)
+        except stt.STTUnavailable:
+            continue
+        if transcript:
+            await conn.send({"type": "transcript", "chat_id": chat_id,
+                             "text": transcript, "language": detected,
+                             "draft": True, "partial": True})
+
+
+async def run_transcribe_only(conn: Connection, state, user_id: str,
+                              chat_id: str, audio_bytes: bytes,
+                              language: str | None = None,
+                              mime: str = "audio/webm") -> None:
+    """Speech-to-text as a DRAFT: transcribe and hand the text back for the
+    user to edit and submit (or discard) — no message saved, no reply run.
+    The composer mic uses this; call mode keeps the full auto-send turn."""
+    async with async_session() as db:
+        chat = await db.get(Chat, chat_id)
+        if chat is None or chat.user_id != user_id:
+            return await _error(conn, chat_id, "chat_not_found", "unknown chat")
+        requested = language or chat.language or "en"
+
+    if not await rate_limit.check_request(state.redis, user_id):
+        return await _error(conn, chat_id, "rate_limited",
+                            "too many requests, slow down a little")
+
+    if mime.startswith("audio/pcm"):
+        audio_bytes = _pcm16k_to_wav(audio_bytes)
+        mime = "audio/wav"
+    try:
+        transcript, detected = await stt.transcribe(audio_bytes, requested, mime)
+    except stt.STTUnavailable as e:
+        return await _error(conn, chat_id, "stt_failed", str(e))
+    if not transcript:
+        return await _error(conn, chat_id, "stt_empty",
+                            "no speech recognised in the audio")
+    await conn.send({"type": "transcript", "chat_id": chat_id,
+                     "text": transcript, "language": detected,
+                     "auto": requested == "auto", "final": True,
+                     "draft": True})
 
 
 async def run_voice_turn(conn: Connection, state, user_id: str, chat_id: str,
@@ -433,10 +621,12 @@ async def run_voice_turn(conn: Connection, state, user_id: str, chat_id: str,
         audio_bytes = _pcm16k_to_wav(audio_bytes)
         mime = "audio/wav"
 
+    stt_started = time.monotonic()
     try:
         transcript, detected = await stt.transcribe(audio_bytes, requested, mime)
     except stt.STTUnavailable as e:
         return await _error(conn, chat_id, "stt_failed", str(e))
+    timings = {"stt_ms": round((time.monotonic() - stt_started) * 1000)}
     if not transcript:
         return await _error(conn, chat_id, "stt_empty",
                             "no speech recognised in the audio")
@@ -467,4 +657,4 @@ async def run_voice_turn(conn: Connection, state, user_id: str, chat_id: str,
                         attachment_ids=attachment_ids, language=detected,
                         voice_reply=True,
                         voice=voice if requested != "auto" else None,
-                        cancel_event=cancel_event)
+                        cancel_event=cancel_event, timings=timings)

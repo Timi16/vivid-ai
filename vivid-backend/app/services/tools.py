@@ -39,10 +39,14 @@ async def _noop_status(_: str) -> None:
 @dataclass
 class ToolContext:
     """Turn-scoped context handed to tools that declare context=True: the chat
-    (for per-chat resources like a browser session) and a status callback for
-    progress the user sees live."""
+    (for per-chat resources like a browser session), a status callback for
+    progress the user sees live, the user's attached files for this message
+    (available to run_code's working directory), and `outputs` — files tools
+    create, which the pipeline attaches to the reply."""
     chat_id: str | None = None
     status: Callable[[str], Awaitable[None]] = _noop_status
+    files: list = field(default_factory=list)    # {"name","mime","data": bytes}
+    outputs: list = field(default_factory=list)  # {"name","mime","data": bytes}
 
     def __post_init__(self):
         if self.status is None:
@@ -405,22 +409,44 @@ _FENCE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$")
 
 
 @tool("run_code",
-      ("run a short Python 3 program (stdlib only, no internet) and read "
-       "what it prints — for calculations, data processing, date arithmetic, "
-       "simulations; the program MUST print() its result"),
+      ("execute a Python 3 program (has pillow, reportlab, numpy, pandas; no "
+       "internet) and read what it prints — REQUIRED whenever code output "
+       "matters: calculations, conversions, data processing, simulations, or "
+       "when the user asks to run/demonstrate/test code. The user's attached "
+       "files are ALREADY in the current working directory — open them by "
+       "their exact bare filename, never an invented /tmp/ or absolute path. "
+       "Files the program CREATES (PDFs, images, CSVs…) are attached to the "
+       "reply automatically. The program MUST print() its result"),
       args="code", status="Running code…",
-      enabled=lambda: bool(settings.SANDBOX_URL))
-async def tool_run_code(args: dict) -> str:
+      enabled=lambda: bool(settings.SANDBOX_URL), context=True)
+async def tool_run_code(args: dict, ctx: ToolContext) -> str:
     """Executes in the isolated sandbox container — model-generated code
     never runs in this process. Each run is a fresh subprocess: no state, no
-    network, no secrets."""
+    network, no secrets. The user's attachments go in as workdir files;
+    created files come back via ctx.outputs and get attached to the reply."""
+    import base64 as _b64
+    import mimetypes
+
     code = _FENCE.sub("", str(args.get("code", "")).strip())
     if not code:
         return "error: no code provided"
+    # Models keep inventing absolute paths ("/tmp/photo.png") when both the
+    # input files and any file the program should hand back live in the run's
+    # working directory. Rewriting the literal /tmp/ prefix keeps reads AND
+    # writes in the workdir — a write outside it would silently lose the file.
+    code = code.replace("/tmp/", "")
+    if ctx.files:
+        for f in ctx.files[:8]:
+            name = f["name"]
+            for prefix in ("/workspace/", "/home/user/", "~/", "./"):
+                code = code.replace(f"{prefix}{name}", name)
+    payload = {"code": code, "timeout": settings.SANDBOX_RUN_TIMEOUT}
+    if ctx.files:
+        payload["files"] = {f["name"]: _b64.b64encode(f["data"]).decode()
+                            for f in ctx.files[:8]}
     r = await http.client().post(
-        f"{settings.SANDBOX_URL.rstrip('/')}/run",
-        json={"code": code, "timeout": settings.SANDBOX_RUN_TIMEOUT},
-        timeout=settings.SANDBOX_RUN_TIMEOUT + 8)
+        f"{settings.SANDBOX_URL.rstrip('/')}/run", json=payload,
+        timeout=settings.SANDBOX_RUN_TIMEOUT + 20)
     r.raise_for_status()
     res = r.json()
     out = (res.get("stdout") or "").strip()
@@ -429,9 +455,20 @@ async def tool_run_code(args: dict) -> str:
     if res.get("timed_out"):
         pieces.append(f"error: the program exceeded {settings.SANDBOX_RUN_TIMEOUT}s and was killed")
     if out:
-        pieces.append(f"output:\n{out[:3000]}")
+        pieces.append(f"program printed:\n{out[:3000]}")
     if err:
         pieces.append(f"errors:\n{err[:1500]}")
+    created = False
+    for name, b64 in (res.get("files") or {}).items():
+        data = _b64.b64decode(b64)
+        mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        ctx.outputs.append({"name": name, "mime": mime, "data": data})
+        created = True
+        pieces.append(f"created the file '{name}' ({len(data)} bytes) — it is "
+                      "attached to your reply; tell the user it is ready")
+    if err and not created:
+        pieces.append("NO FILE WAS CREATED. Do not tell the user a file is "
+                      "attached — tell them what failed instead.")
     if not pieces:
         pieces.append("the program produced no output — it must print() its result")
     return "\n".join(pieces)

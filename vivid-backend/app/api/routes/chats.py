@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +8,7 @@ from app.api.deps import get_current_user, get_db
 from app.db.models import Attachment, Chat, Message, User
 from app.schemas.chat import AttachmentOut, ChatCreate, ChatOut, MessageOut
 from app.services import storage
+from app.services.models_gateway import tts
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
@@ -36,6 +39,12 @@ async def create_chat(body: ChatCreate, user: User = Depends(get_current_user),
     return chat
 
 
+@router.get("/{chat_id}", response_model=ChatOut)
+async def get_chat(chat_id: str, user: User = Depends(get_current_user),
+                   db: AsyncSession = Depends(get_db)):
+    return await _owned_chat(chat_id, user, db)
+
+
 @router.get("/{chat_id}/messages", response_model=list[MessageOut])
 async def list_messages(chat_id: str, limit: int = Query(100, le=500),
                         offset: int = 0,
@@ -64,6 +73,48 @@ async def list_messages(chat_id: str, limit: int = Query(100, le=500),
         out.attachments = atts_by_msg.get(m.id, [])
         result.append(out)
     return result
+
+
+@router.post("/{chat_id}/messages/{message_id}/speech", response_model=AttachmentOut)
+async def speak_message(chat_id: str, message_id: str,
+                        user: User = Depends(get_current_user),
+                        db: AsyncSession = Depends(get_db)):
+    """On-demand spoken version of an assistant reply. Voice turns store their
+    audio at generation time; typed turns get theirs synthesized here on the
+    first play and cached as a normal audio attachment."""
+    chat = await _owned_chat(chat_id, user, db)
+    msg = await db.get(Message, message_id)
+    if msg is None or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if msg.role != "assistant":
+        raise HTTPException(status_code=400,
+                            detail="Only assistant replies can be spoken")
+
+    existing = (await db.execute(
+        select(Attachment).where(Attachment.message_id == message_id,
+                                 Attachment.kind == "audio"))).scalars().first()
+    if existing is not None:
+        out = AttachmentOut.model_validate(existing)
+        out.url = storage.presigned_url(existing.storage_key)
+        return out
+
+    # The pipeline saves the reply post-translation, so the stored content is
+    # already in the chat's language and speaks as-is.
+    try:
+        wav = await tts.synthesize(
+            msg.content, tts.speak_language(chat.language, translated=True))
+    except tts.TTSUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    key = f"{user.id}/{chat_id}/{uuid.uuid4()}.wav"
+    await storage.upload(key, wav, "audio/wav")
+    att = Attachment(message_id=message_id, chat_id=chat_id, user_id=user.id,
+                     kind="audio", filename="reply.wav", storage_key=key,
+                     mime="audio/wav", size_bytes=len(wav))
+    db.add(att)
+    await db.commit()
+    out = AttachmentOut.model_validate(att)
+    out.url = storage.presigned_url(key)
+    return out
 
 
 @router.delete("/{chat_id}", status_code=204)

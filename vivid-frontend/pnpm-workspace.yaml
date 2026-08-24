@@ -1,0 +1,5 @@
+# unrs-resolver is a native binary pulled in by the ESLint import resolver. It
+# is not needed to run the linter, so its postinstall stays off rather than
+# being granted a build step. The sibling repo ignores the same package.
+allowBuilds:
+  unrs-resolver: false
