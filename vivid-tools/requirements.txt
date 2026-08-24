@@ -1,0 +1,7 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+# Must match the browser bundle in the Docker base image (playwright/python:v1.47.0).
+# A newer pip package looks for browsers the image doesn't ship and fails to launch.
+playwright==1.47.0

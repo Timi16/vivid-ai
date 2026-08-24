@@ -1,0 +1,11 @@
+# docker-compose.yml
+services:
+  browser:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    # Bound to loopback: Caddy terminates TLS and is the only way in.
+    ports: ["127.0.0.1:8005:8005"]
+    mem_limit: 3g
+    cpus: 2
+    shm_size: 1gb          # Chromium crashes with the 64MB Docker default
