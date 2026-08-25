@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 from app.core.config import settings
 from app.services import search
 from app.services.models_gateway import http
+from app.services.vivid_tools import call as _vt
 
 _HEADERS = {"User-Agent": "VividAI-backend/0.1"}
 
@@ -248,24 +249,6 @@ async def tool_read_url(args: dict) -> str:
 
 
 # ---------------------------------------------------------------- browse
-def _tools_headers() -> dict:
-    if settings.VIVID_TOOLS_TOKEN:
-        return {"Authorization": f"Bearer {settings.VIVID_TOOLS_TOKEN}"}
-    return {}
-
-
-async def _vt(path: str, payload: dict, timeout: int = 40) -> dict:
-    """One call to the vivid-tools browser service; raises on tool errors."""
-    base = settings.VIVID_TOOLS_URL.rstrip("/")
-    r = await http.client().post(f"{base}{path}", json=payload,
-                                 headers=_tools_headers(), timeout=timeout)
-    r.raise_for_status()
-    body = r.json()
-    if not body.get("ok", True):
-        raise RuntimeError(body.get("error") or "browser error")
-    return body.get("data") or {}
-
-
 @tool("browse_page",
       ("open ONE web page in a real browser and read what it renders — use "
        "instead of read_url for JavaScript-heavy sites, or when read_url "
@@ -290,27 +273,10 @@ async def tool_browse_page(args: dict) -> str:
 
 
 # --- multi-round browsing agent ----------------------------------------------
-BROWSE_MAX_STEPS = 6
-_BROWSE_JSON = re.compile(r"\{.*\}", re.DOTALL)
-
-_BROWSE_CONTROLLER = """You are operating a web browser to accomplish this goal:
-GOAL: {goal}
-
-Below is a snapshot of the current page: title, headings, text, and numbered
-interactive ELEMENTS. Decide the single next action. Reply with ONLY one JSON
-object, no prose:
-  {{"action": "click", "ref": <n>}}                     click element [n]
-  {{"action": "type", "ref": <n>, "value": "<text>"}}   fill a field
-  {{"action": "submit", "ref": <n>, "value": "<text>"}} fill and press Enter (search boxes)
-  {{"action": "goto", "url": "https://..."}}            open a different page
-  {{"action": "done", "answer": "<what you found>"}}    finish — answer the goal from what the pages showed
-
-You have {remaining} actions left. If the current page already contains what
-the goal needs, reply done with a specific, factual answer. The answer must
-quote only what a snapshot actually showed — include the page title and site
-domain you got it from (e.g. "according to iana.org…"). Never invent content
-that is not in a snapshot.
-Result of your previous action: {last_result}"""
+# The loop itself lives in services/browsing.py so this tool and the partner
+# /v1/browser/tasks endpoint run the same controller. Keeping two copies meant
+# they would drift, and the chat product is the one that would quietly get
+# worse.
 
 
 @tool("browse",
@@ -321,71 +287,17 @@ Result of your previous action: {last_result}"""
       args="url, goal", status="Opening the browser…",
       enabled=lambda: bool(settings.VIVID_TOOLS_URL), context=True)
 async def tool_browse(args: dict, ctx: ToolContext) -> str:
-    """A mini agent-in-a-tool: snapshot -> the LLM picks one action -> execute
-    -> repeat, up to BROWSE_MAX_STEPS. The browser session is keyed to the
-    chat, so a follow-up message can continue on the same page (cookies and
-    all); vivid-tools reaps idle sessions after its TTL."""
-    from app.services.models_gateway import llm
+    """The browser session is keyed to the chat, so a follow-up message can
+    continue on the same page (cookies and all); vivid-tools reaps idle
+    sessions after its TTL."""
+    from app.services import browsing
 
     url = str(args.get("url", ""))
     goal = str(args.get("goal") or args.get("query") or "read the page").strip()
     if not url.startswith(("http://", "https://")):
         return "error: not a valid http(s) url"
-
-    sid = f"chat-{ctx.chat_id}" if ctx.chat_id else f"turn-{uuid.uuid4().hex[:10]}"
-    await _vt("/browse/goto", {"url": url, "session": sid})
-    last_result = f"opened {url}"
-    trail: list[str] = []
-
-    for step in range(BROWSE_MAX_STEPS):
-        snap = await _vt("/browse/snapshot", {"session": sid}, 30)
-        controller = _BROWSE_CONTROLLER.format(
-            goal=goal, remaining=BROWSE_MAX_STEPS - step,
-            last_result=last_result)
-        try:
-            raw = await llm.complete(
-                [{"role": "system", "content": controller},
-                 {"role": "user", "content": snap.get("snapshot") or "(blank page)"}],
-                max_tokens=300, temperature=0.0)
-            match = _BROWSE_JSON.search(raw)
-            decision = json.loads(match.group(0)) if match else {}
-        except Exception as e:
-            return (f"error: browse controller failed ({e}); "
-                    f"last page:\n{(snap.get('snapshot') or '')[:2000]}")
-
-        action = decision.get("action")
-        if action == "done":
-            answer = str(decision.get("answer") or "").strip()
-            steps = f" (steps: {'; '.join(trail)})" if trail else ""
-            return (answer or (snap.get("snapshot") or "")[:2000]) + steps
-
-        try:
-            if action == "goto":
-                new_url = str(decision.get("url", ""))
-                if not new_url.startswith(("http://", "https://")):
-                    raise ValueError("controller produced an invalid url")
-                await ctx.status(f"Opening {new_url[:50]}…")
-                nav = await _vt("/browse/goto", {"url": new_url, "session": sid})
-                last_result = f"opened {nav.get('url')}"
-            elif action in ("click", "type", "submit"):
-                verb = {"click": "Clicking", "type": "Typing",
-                        "submit": "Searching"}[action]
-                await ctx.status(f"{verb}…")
-                res = await _vt("/browse/act", {
-                    "session": sid, "ref": int(decision.get("ref", -1)),
-                    "action": action, "value": str(decision.get("value", ""))})
-                last_result = res.get("did") or action
-            else:
-                break  # unparseable decision — stop burning steps
-            trail.append(last_result)
-        except Exception as e:
-            last_result = f"error: {e}"
-            trail.append(last_result)
-
-    snap = await _vt("/browse/snapshot", {"session": sid}, 30)
-    return ("Ran out of browsing steps. Actions taken: "
-            + "; ".join(trail[-4:]) + "\nFinal page:\n"
-            + (snap.get("snapshot") or ""))[:3500]
+    return await browsing.run_for_chat(ctx.chat_id, url, goal,
+                                       on_status=ctx.status)
 
 
 # ---------------------------------------------------------------- run code

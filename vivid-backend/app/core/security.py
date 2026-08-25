@@ -1,9 +1,37 @@
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
 
 from app.core.config import settings
+
+# Partner API keys. `vk_` makes a leaked key greppable in logs and scannable by
+# secret-detection tooling; the random half is 32 bytes of urandom.
+API_KEY_PREFIX = "vk_"
+API_KEY_BYTES = 32
+#: Characters of the key kept in the clear, for "which key is this?".
+API_KEY_VISIBLE = 11
+
+
+def generate_api_key() -> tuple[str, str, str]:
+    """Returns (full_key, prefix, key_hash). The full key is shown once and
+    never stored — only its hash goes to the database."""
+    token = secrets.token_urlsafe(API_KEY_BYTES)
+    full = f"{API_KEY_PREFIX}{token}"
+    return full, full[:API_KEY_VISIBLE], hash_api_key(full)
+
+
+def hash_api_key(key: str) -> str:
+    """SHA-256, deliberately. Keys are high-entropy random strings, so there is
+    nothing to brute-force; bcrypt's cost would be paid on every request for no
+    security gain."""
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def looks_like_api_key(credential: str) -> bool:
+    return credential.startswith(API_KEY_PREFIX)
 
 
 def hash_password(password: str) -> str:

@@ -50,6 +50,43 @@ class Client(Base):
     config_json: Mapped[dict | None] = mapped_column(JSONB, default=None)
 
 
+class ApiKey(Base):
+    """A partner credential. Belongs to a client (which supplies the system
+    prompt and tool allowlist) and to a service-account user (which owns the
+    chats, attachments and browser sessions the key creates).
+
+    Keying data to a real user row rather than making user_id nullable
+    everywhere means every existing ownership check keeps working untouched —
+    the alternative was a nullable FK on five tables and an `or` in every
+    query.
+
+    Only the hash is stored. Keys are 32 bytes of urandom, so SHA-256 is the
+    right primitive: bcrypt exists to slow down guessing low-entropy
+    passwords, and paying its cost on every single API request would be a
+    self-inflicted rate limit.
+    """
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    client_id: Mapped[str] = mapped_column(
+        ForeignKey("clients.id"), default=settings.DEFAULT_CLIENT_ID)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    # The visible half, for "which key is this?" without revealing the secret.
+    prefix: Mapped[str] = mapped_column(String(24), index=True)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # Concurrent browser sessions this key may hold. Enforced before the
+    # browser pool is asked, so one partner cannot starve the tier.
+    max_sessions: Mapped[int] = mapped_column(
+        Integer, default=settings.BROWSER_SESSIONS_PER_KEY)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None)
+
+
 class Chat(Base):
     __tablename__ = "chats"
 

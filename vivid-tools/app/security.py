@@ -23,6 +23,24 @@ def require_token(authorization: str = Header(default="")) -> None:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+def host_allowed(allowed: list, url: str) -> bool:
+    """True when `url` is inside a session's allowed domains.
+
+    An authenticated session carries live cookies, and the controller chooses
+    where to go from page text an attacker can write. The backend checks this
+    too; this is the second lock on the same door, in the process that
+    actually holds the cookies. An empty list means unrestricted, which the
+    backend only permits for unauthenticated sessions.
+    """
+    if not allowed:
+        return True
+    host = (urlparse(url).hostname or "").lower()
+    # Subdomains are inside; a suffix match is not ("example.com.evil.com"
+    # must never pass for "example.com").
+    return bool(host) and any(host == d or host.endswith(f".{d}")
+                              for d in allowed)
+
+
 def is_allowed_url(url: str) -> bool:
     if settings().allow_private_hosts:
         return url.startswith(("http://", "https://"))
