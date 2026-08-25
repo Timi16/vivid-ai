@@ -30,7 +30,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.db.models import Attachment, Chat, Client, Connector, Message
 from app.db.session import async_session
-from app.services import agent, prompt, rate_limit, storage
+from app.services import agent, prompt, rate_limit, storage, websites
 from app.services import connectors as connectors_svc
 from app.services import tools as tools_svc
 from app.services.models_gateway import llm, stt, translate as translate_svc, tts
@@ -477,6 +477,32 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
                     "url": storage.presigned_url(key)})
         except Exception as e:
             log.warning("could not store tool output %s: %s", out.get("name"), e)
+
+    # --- a website built in the reply becomes a file on the message ---
+    # Same shape as a tool-created file, so it lands on the Artifacts page and
+    # the apps can open the stored copy instead of re-parsing the reply.
+    if not cancelled:
+        site = websites.extract_document(reply)
+        if site:
+            html, title, filename = site
+            try:
+                data = html.encode("utf-8")
+                key = f"{user_id}/{chat_id}/{uuid.uuid4()}-{filename}"
+                await storage.upload(key, data, "text/html")
+                async with async_session() as db:
+                    att = Attachment(
+                        message_id=assistant_msg_id, chat_id=chat_id,
+                        user_id=user_id, kind="file", filename=filename,
+                        storage_key=key, mime="text/html",
+                        size_bytes=len(data))
+                    db.add(att)
+                    await db.commit()
+                    out_attachments.append({
+                        "id": att.id, "kind": "file", "filename": filename,
+                        "mime": "text/html", "size_bytes": len(data),
+                        "url": storage.presigned_url(key)})
+            except Exception as e:
+                log.warning("could not store website %s: %s", filename, e)
 
     # --- voice reply audio ---
     reply_wav = None

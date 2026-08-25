@@ -8,19 +8,22 @@ import remarkMath from "remark-math";
 
 import { CopyIcon } from "@/components/ui/icons";
 import { copyText } from "@/lib/clipboard";
-import type { Artifact } from "@/features/chat/lib/artifacts";
+import { ArtifactCard } from "@/features/chat/components/artifact-card";
+import { isPreviewable, titleOf, type Artifact } from "@/features/chat/lib/artifacts";
 
 interface MarkdownProps {
   children: string;
   // When given, fenced code blocks get an "Open" action that hands the block
-  // to the artifact panel.
+  // to the artifact panel, and html blocks render as a website card.
   onOpenArtifact?: (artifact: Artifact) => void;
+  // The reply is still streaming and its html fence has not closed yet.
+  generating?: boolean;
 }
 
 // Assistant text is markdown (the model is prompted to use code blocks,
 // lists, tables, and LaTeX math, rendered by KaTeX). Styled via the .vd-md
 // rules in globals.css so it sits inside the thread typography.
-export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
+export function Markdown({ children, onOpenArtifact, generating = false }: MarkdownProps) {
   return (
     <div className="vd-md text-fg/85 text-[15px] leading-[1.75]">
       <ReactMarkdown
@@ -34,13 +37,21 @@ export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
             const match = /language-([\w-]+)/.exec(className ?? "");
             const isBlock = Boolean(match) || text.includes("\n");
             if (!isBlock) return <code className={className}>{children}</code>;
-            return (
-              <CodeBlock
-                language={match?.[1] ?? "text"}
-                code={text.replace(/\n$/, "")}
-                onOpen={onOpenArtifact}
-              />
-            );
+            const language = match?.[1] ?? "text";
+            const code = text.replace(/\n$/, "");
+            if (onOpenArtifact && isPreviewable(language)) {
+              const title = titleOf(code);
+              return (
+                <ArtifactCard
+                  title={title}
+                  generating={generating}
+                  onOpen={() =>
+                    onOpenArtifact({ kind: "code", title, language: "html", content: code })
+                  }
+                />
+              );
+            }
+            return <CodeBlock language={language} code={code} onOpen={onOpenArtifact} />;
           },
         }}
       >

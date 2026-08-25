@@ -192,12 +192,14 @@ export function useLiveThread(
               kind: "reply",
               title: "Reply ready",
               detail: (event.text ?? "").slice(0, 90),
+              chatId: chatRef.current,
             });
             for (const file of event.attachments ?? []) {
               pushActivity({
                 kind: "file",
                 title: `Created ${file.filename ?? "a file"}`,
                 detail: file.mime,
+                chatId: chatRef.current,
               });
             }
           }
@@ -244,7 +246,12 @@ export function useLiveThread(
           const message = event.message ?? event.code ?? "Something went wrong";
           setError(message);
           toast(message);
-          pushActivity({ kind: "error", title: "Something failed", detail: message.slice(0, 90) });
+          pushActivity({
+            kind: "error",
+            title: "Something failed",
+            detail: message.slice(0, 90),
+            chatId: chatRef.current,
+          });
           if (voiceModeRef.current === "call" && callOpenRef.current) {
             // Without a connection, re-opening the mic would just loop.
             if (lostConnection) endCall();
@@ -277,7 +284,15 @@ export function useLiveThread(
           // The sent image shows on the user's bubble immediately, not after
           // some later refetch.
           attachments: imageUrl
-            ? [{ id: `local-img-${Date.now()}`, kind: "image", url: imageUrl, filename: null, mime: "" }]
+            ? [
+                {
+                  id: `local-img-${Date.now()}`,
+                  kind: "image",
+                  url: imageUrl,
+                  filename: null,
+                  mime: "",
+                },
+              ]
             : undefined,
         },
       ]);
@@ -369,7 +384,14 @@ export function useLiveThread(
     cancel,
     recording,
     toggleMic,
-    call: { open: callOpen, state: callState, line: callLine, start: startCall, end: endCall, sendNow: finishListening },
+    call: {
+      open: callOpen,
+      state: callState,
+      line: callLine,
+      start: startCall,
+      end: endCall,
+      sendNow: finishListening,
+    },
   };
 }
 

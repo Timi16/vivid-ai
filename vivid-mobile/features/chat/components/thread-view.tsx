@@ -32,7 +32,7 @@ import { ShareDialog } from "@/features/chat/components/share-dialog";
 import { ThinkingLine } from "@/features/chat/components/thinking-line";
 import { useLiveThread } from "@/features/chat/hooks/use-live-thread";
 import { useSession } from "@/features/chat/hooks/use-session";
-import type { Artifact } from "@/features/chat/lib/artifacts";
+import { extractHtmlArtifact, type Artifact } from "@/features/chat/lib/artifacts";
 import { takePendingCall, takePendingPrompt } from "@/features/chat/lib/handoff";
 import { pickImage } from "@/features/chat/lib/pick-image";
 import type { LiveMessage, PendingImage } from "@/features/chat/lib/types";
@@ -92,6 +92,25 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
   );
   // Something the assistant made, opened over the chat.
   const [artifact, setArtifact] = useState<Artifact | null>(null);
+
+  // A website being built in the live reply. The panel opens by itself the
+  // moment the html fence starts, streams the code in, and flips to the
+  // preview when the fence closes. Closing the panel mid-build is respected
+  // for the rest of that turn.
+  const liveSite = useMemo(() => extractHtmlArtifact(thread.stream), [thread.stream]);
+  const generating = Boolean(liveSite && !liveSite.complete && thread.busy);
+  const dismissedBuildRef = useRef(false);
+  useEffect(() => {
+    if (!thread.busy) dismissedBuildRef.current = false;
+  }, [thread.busy]);
+  useEffect(() => {
+    if (!liveSite || dismissedBuildRef.current) return;
+    setArtifact({ kind: "code", title: liveSite.title, language: "html", content: liveSite.html });
+  }, [liveSite]);
+  function closeArtifact() {
+    if (generating) dismissedBuildRef.current = true;
+    setArtifact(null);
+  }
 
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -298,7 +317,11 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
 
           <ActivityTrail steps={thread.activity} busy={thread.busy} />
 
-          {thread.stream ? <Markdown>{thread.stream}</Markdown> : null}
+          {thread.stream ? (
+            <Markdown onOpenArtifact={setArtifact} generating={generating}>
+              {thread.stream}
+            </Markdown>
+          ) : null}
           {thread.busy && !thread.stream && !thread.activity.length ? <ThinkingLine /> : null}
           {thread.error ? (
             <Pressable accessibilityRole="button" onPress={thread.dismissError}>
@@ -331,7 +354,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
         />
       </View>
 
-      <ArtifactPanel artifact={artifact} onClose={() => setArtifact(null)} />
+      <ArtifactPanel artifact={artifact} generating={generating} onClose={closeArtifact} />
 
       <CallOverlay
         open={thread.call.open}

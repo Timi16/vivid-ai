@@ -13,6 +13,8 @@ export interface ActivityItem {
   kind: "reply" | "file" | "call" | "error";
   title: string;
   detail: string;
+  // The thread this happened in, so a notification can open it.
+  chatId?: string;
   at: number;
   unread: boolean;
 }
@@ -28,7 +30,12 @@ function emit() {
 
 export function pushActivity(entry: Omit<ActivityItem, "id" | "at" | "unread">) {
   items = [
-    { ...entry, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, at: Date.now(), unread: true },
+    {
+      ...entry,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      at: Date.now(),
+      unread: true,
+    },
     ...items,
   ].slice(0, MAX_ITEMS);
   emit();

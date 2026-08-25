@@ -14,6 +14,7 @@ import {
   useRouter,
 } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as SystemUI from "expo-system-ui";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -77,6 +78,12 @@ function RootNavigator() {
   // auth screens must never sit under the app (or the app under them) where
   // a back action could reveal them. Covers every path that clears or sets
   // tokens, including a 401 inside the API client.
+  // The native window behind every screen carries the page colour, so no
+  // transition or blur can ever show the system default white through.
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(theme.colors.page);
+  }, [theme.colors.page]);
+
   const wasSignedIn = useRef(signedIn);
   useEffect(() => {
     if (wasSignedIn.current === signedIn) return;
@@ -102,7 +109,10 @@ function RootNavigator() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: "transparent" },
-          animation: "fade",
+          // No transition on the root switch. A cross-fade lets the outgoing
+          // sign-in card's blur sample the bare window for a frame and flash
+          // white; an instant swap has nothing to sample.
+          animation: "none",
           // The root has no legitimate "back": swiping must never reveal the
           // auth screens under the app, or the app under the auth screens.
           gestureEnabled: false,

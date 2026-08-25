@@ -1,6 +1,6 @@
 // In-app activity feed: what the assistant has actually been doing this
 // session (replies finished, files created, calls, errors). The notifications
-// menu reads it; the live-thread hook writes to it. In-memory on purpose: a
+// screen, the bell badge and the banner read it; the live-thread hook writes to it. In-memory on purpose: a
 // notifications backend can replace the store later without touching either
 // side.
 
@@ -11,6 +11,8 @@ export interface ActivityItem {
   kind: "reply" | "file" | "call" | "error";
   title: string;
   detail: string;
+  // The thread this happened in, so a notification can open it.
+  chatId?: string;
   at: number;
   unread: boolean;
 }

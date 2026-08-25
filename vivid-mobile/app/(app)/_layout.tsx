@@ -1,5 +1,6 @@
 import { Drawer } from "expo-router/drawer";
 
+import { ActivityBanner } from "@/components/layout/activity-banner";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { DrawerContent } from "@/components/layout/drawer-content";
 import { Topbar } from "@/components/layout/topbar";
@@ -25,14 +26,16 @@ export default function AppLayout() {
         <Drawer.Screen name="artifacts" options={{ title: "Artifacts" }} />
         <Drawer.Screen name="history" options={{ title: "History" }} />
         <Drawer.Screen name="settings" options={{ title: "Settings" }} />
+        <Drawer.Screen name="notifications" options={{ title: "Notifications" }} />
         <Drawer.Screen name="computer" options={{ title: "Computer" }} />
         <Drawer.Screen name="spaces" options={{ title: "Spaces" }} />
         <Drawer.Screen name="customize" options={{ title: "Customize" }} />
         <Drawer.Screen name="discover" options={{ title: "Discover" }} />
         <Drawer.Screen name="upgrade" options={{ title: "Upgrade" }} />
-        <Drawer.Screen name="thread/[id]" options={{ title: "Thread", swipeEnabled: false }} />
+        <Drawer.Screen name="thread/[id]" options={{ title: "Thread" }} />
       </Drawer>
       <CommandPalette />
+      <ActivityBanner />
     </>
   );
 }

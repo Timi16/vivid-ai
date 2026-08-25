@@ -21,6 +21,7 @@ const FILTERS: { value: Filter; label: string }[] = [
 ];
 
 function iconFor(artifact: ArtifactOut): string {
+  if (artifact.mime === "text/html") return "🌐";
   if (artifact.mime === "application/pdf") return "📕";
   if (artifact.mime.startsWith("text/csv")) return "📊";
   if (artifact.mime.startsWith("image/")) return "🖼";

@@ -116,6 +116,13 @@ export function ChatComposer({
         placeholderTextColor={theme.fg(0.4)}
         selectionColor={theme.fg(0.5)}
         keyboardAppearance={theme.mode}
+        // Return sends, like Enter on the web. "submit" keeps the field from
+        // inserting a newline and keeps the keyboard up for the next message;
+        // the send key only lights up once there is something to send.
+        returnKeyType="send"
+        submitBehavior="submit"
+        enablesReturnKeyAutomatically
+        onSubmitEditing={submit}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={{

@@ -198,12 +198,14 @@ export function useLiveThread(
               kind: "reply",
               title: "Reply ready",
               detail: (event.text ?? "").slice(0, 90),
+              chatId: chatRef.current,
             });
             for (const file of event.attachments ?? []) {
               pushActivity({
                 kind: "file",
                 title: `Created ${file.filename ?? "a file"}`,
                 detail: file.mime,
+                chatId: chatRef.current,
               });
             }
             setLive((prev) => [
@@ -246,7 +248,12 @@ export function useLiveThread(
           const message = event.message ?? event.code ?? "Something went wrong";
           setError(message);
           toast(message);
-          pushActivity({ kind: "error", title: "Something failed", detail: message.slice(0, 90) });
+          pushActivity({
+            kind: "error",
+            title: "Something failed",
+            detail: message.slice(0, 90),
+            chatId: chatRef.current,
+          });
           if (voiceModeRef.current === "call" && callOpenRef.current) {
             // Without a connection, re-opening the mic would just loop.
             if (lostConnection) endCall();

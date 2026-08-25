@@ -25,9 +25,13 @@ import { useLiveThread } from "@/features/chat/hooks/use-live-thread";
 import { useSession } from "@/features/chat/hooks/use-session";
 import { backend } from "@/lib/backend/client";
 import { playUrl, playWavBase64, stopPlayback } from "@/lib/backend/audio";
-import type { Artifact } from "@/features/chat/lib/artifacts";
+import { extractHtmlArtifact, type Artifact } from "@/features/chat/lib/artifacts";
 import type { LiveMessage } from "@/features/chat/lib/types";
 import { useIsMobile } from "@/hooks/use-is-mobile";
+
+function isStoredSite(attachment: { mime: string }, content: string): boolean {
+  return attachment.mime === "text/html" && extractHtmlArtifact(content) !== null;
+}
 
 interface ThreadViewProps {
   sessionId: string;
@@ -42,9 +46,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
   // The draft survives a refresh: dictating a message and losing it to a
   // stray F5 is exactly the failure a draft exists to prevent.
   const [prompt, setPrompt] = useState(() =>
-    typeof window === "undefined"
-      ? ""
-      : (sessionStorage.getItem(`vivid-draft-${sessionId}`) ?? "")
+    typeof window === "undefined" ? "" : (sessionStorage.getItem(`vivid-draft-${sessionId}`) ?? "")
   );
   const updatePrompt = (value: string) => {
     setPrompt(value);
@@ -70,6 +72,25 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
   // phone).
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const isMobile = useIsMobile();
+
+  // A website being built in the live reply. The panel opens by itself the
+  // moment the html fence starts, streams the code in, and flips to the
+  // preview when the fence closes. Closing the panel mid-build is respected
+  // for the rest of that turn.
+  const liveSite = useMemo(() => extractHtmlArtifact(thread.stream), [thread.stream]);
+  const generating = Boolean(liveSite && !liveSite.complete && thread.busy);
+  const dismissedBuildRef = useRef(false);
+  useEffect(() => {
+    if (!thread.busy) dismissedBuildRef.current = false;
+  }, [thread.busy]);
+  useEffect(() => {
+    if (!liveSite || dismissedBuildRef.current) return;
+    setArtifact({ kind: "code", title: liveSite.title, language: "html", content: liveSite.html });
+  }, [liveSite]);
+  function closeArtifact() {
+    if (generating) dismissedBuildRef.current = true;
+    setArtifact(null);
+  }
 
   async function saveEdit() {
     if (!editingId || !editingText.trim()) return;
@@ -267,210 +288,229 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
 
   return (
     <div className="flex h-full min-h-full">
-    <div className="flex min-h-full min-w-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto w-full max-w-[760px] flex-1 px-5 pt-8 pb-6">
-        <h1 className="ws-display text-fg text-[24px] leading-tight">{heading}</h1>
+      <div className="flex min-h-full min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="mx-auto w-full max-w-[760px] flex-1 px-5 pt-8 pb-6">
+          <h1 className="ws-display text-fg text-[24px] leading-tight">{heading}</h1>
 
-        <div className="mt-8 flex flex-col gap-8">
-          {messages.map((message) =>
-            message.role === "user" ? (
-              // The user's turn sits right in its own bubble, the answer sits
-              // left at full width, so the two sides of the exchange read apart.
-              <div key={message.id} className="group flex flex-col items-end gap-2 pl-12">
-                {message.attachments
-                  ?.filter((a) => a.kind === "image" && a.url)
-                  .map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      aria-label="View image full size"
-                      onClick={() => setViewerImage({ url: a.url ?? "", filename: a.filename })}
-                      className="cursor-zoom-in"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={a.url ?? ""} alt="" className="max-h-[260px] max-w-[280px] rounded-xl" />
-                    </button>
-                  ))}
-                {editingId === message.id ? (
-                  <div className="vd-glass-card flex w-full flex-col gap-2 p-3">
-                    <textarea
-                      value={editingText}
-                      autoFocus
-                      rows={Math.min(6, editingText.split("\n").length + 1)}
-                      onChange={(e) => setEditingText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          void saveEdit();
-                        }
-                        if (e.key === "Escape") setEditingId(null);
-                      }}
-                      className="text-fg w-full resize-none bg-transparent text-[15px] outline-none"
-                    />
-                    <div className="flex justify-end gap-2">
+          <div className="mt-8 flex flex-col gap-8">
+            {messages.map((message) =>
+              message.role === "user" ? (
+                // The user's turn sits right in its own bubble, the answer sits
+                // left at full width, so the two sides of the exchange read apart.
+                <div key={message.id} className="group flex flex-col items-end gap-2 pl-12">
+                  {message.attachments
+                    ?.filter((a) => a.kind === "image" && a.url)
+                    .map((a) => (
                       <button
+                        key={a.id}
                         type="button"
-                        onClick={() => setEditingId(null)}
-                        className="text-fg/55 hover:text-fg cursor-pointer rounded-full px-3 py-1.5 text-[12.5px]"
+                        aria-label="View image full size"
+                        onClick={() => setViewerImage({ url: a.url ?? "", filename: a.filename })}
+                        className="cursor-zoom-in"
                       >
-                        Cancel
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={a.url ?? ""}
+                          alt=""
+                          className="max-h-[260px] max-w-[280px] rounded-xl"
+                        />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void saveEdit()}
-                        disabled={!editingText.trim()}
-                        className="vd-glass-bright cursor-pointer rounded-full px-4 py-1.5 text-[12.5px] font-semibold disabled:opacity-40"
-                      >
-                        Send
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p className="vd-glass-control text-fg max-w-full rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed font-medium whitespace-pre-wrap">
-                      {message.content}
-                    </p>
-                    {!message.id.startsWith("local-") ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingId(message.id);
-                          setEditingText(message.content);
+                    ))}
+                  {editingId === message.id ? (
+                    <div className="vd-glass-card flex w-full flex-col gap-2 p-3">
+                      <textarea
+                        value={editingText}
+                        autoFocus
+                        rows={Math.min(6, editingText.split("\n").length + 1)}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            void saveEdit();
+                          }
+                          if (e.key === "Escape") setEditingId(null);
                         }}
-                        className="text-fg/35 hover:text-fg cursor-pointer text-[11.5px] font-medium opacity-0 transition-opacity group-hover:opacity-100"
-                      >
-                        ✎ Edit
-                      </button>
-                    ) : null}
-                  </>
-                )}
-              </div>
-            ) : (
-              <div key={message.id} className="flex flex-col gap-4">
-                {message.attachments
-                  ?.filter((a) => a.kind === "image" && a.url)
-                  .map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      aria-label="View image full size"
-                      onClick={() => setViewerImage({ url: a.url ?? "", filename: a.filename })}
-                      className="w-fit cursor-zoom-in"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={a.url ?? ""} alt="" className="max-h-[300px] max-w-[320px] rounded-xl" />
-                    </button>
-                  ))}
-
-                <Markdown onOpenArtifact={setArtifact}>{message.content}</Markdown>
-
-                {message.attachments?.filter((a) => a.kind === "file" && a.url).map((a) => (
-                  <div key={a.id} className="vd-glass-control flex w-fit items-center gap-3 rounded-xl px-3.5 py-2 text-[13px]">
-                    <span className="text-fg/80 font-medium">📄 {a.filename ?? "file"}</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setArtifact({
-                          kind: "file",
-                          title: a.filename ?? "file",
-                          url: a.url ?? "",
-                          mime: a.mime,
-                        })
-                      }
-                      className="text-fg/55 hover:text-fg cursor-pointer text-[12px] font-semibold"
-                    >
-                      Open
-                    </button>
-                    <a
-                      href={a.url ?? "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-fg/55 hover:text-fg text-[12px] font-semibold"
-                    >
-                      Download
-                    </a>
-                  </div>
-                ))}
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    disabled={speakingId === message.id}
-                    onClick={() => void playReply(message)}
-                    className="vd-glass-control text-fg/70 hover:text-fg flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] disabled:opacity-50"
-                  >
-                    <SpeakerIcon size={14} />
-                    {speakingId === message.id ? "Preparing…" : "Play reply"}
-                  </button>
-                  {message.usedTools ? (
-                    <span className="text-fg/40 text-[11.5px] font-medium">⚙ used tools</span>
-                  ) : null}
+                        className="text-fg w-full resize-none bg-transparent text-[15px] outline-none"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(null)}
+                          className="text-fg/55 hover:text-fg cursor-pointer rounded-full px-3 py-1.5 text-[12.5px]"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void saveEdit()}
+                          disabled={!editingText.trim()}
+                          className="vd-glass-bright cursor-pointer rounded-full px-4 py-1.5 text-[12.5px] font-semibold disabled:opacity-40"
+                        >
+                          Send
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="vd-glass-control text-fg max-w-full rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed font-medium whitespace-pre-wrap">
+                        {message.content}
+                      </p>
+                      {!message.id.startsWith("local-") ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingId(message.id);
+                            setEditingText(message.content);
+                          }}
+                          className="text-fg/35 hover:text-fg cursor-pointer text-[11.5px] font-medium opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          ✎ Edit
+                        </button>
+                      ) : null}
+                    </>
+                  )}
                 </div>
+              ) : (
+                <div key={message.id} className="flex flex-col gap-4">
+                  {message.attachments
+                    ?.filter((a) => a.kind === "image" && a.url)
+                    .map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        aria-label="View image full size"
+                        onClick={() => setViewerImage({ url: a.url ?? "", filename: a.filename })}
+                        className="w-fit cursor-zoom-in"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={a.url ?? ""}
+                          alt=""
+                          className="max-h-[300px] max-w-[320px] rounded-xl"
+                        />
+                      </button>
+                    ))}
 
-                <AnswerActions
-                  answer={message.content}
-                  rating={ratings[message.id] ?? null}
-                  onRate={(rating) => {
-                    setRatings((prev) => ({ ...prev, [message.id]: rating }));
-                    setFeedbackFor(rating);
-                  }}
-                  onShare={() => setShareOpen(true)}
-                  onExport={() => setExportOpen(true)}
-                  onRename={() => setRenameOpen(true)}
-                  onAddToSpace={() => setSpaceOpen(true)}
-                  onReport={() => setReportOpen(true)}
-                  onDelete={() => setDeleteOpen(true)}
-                />
-              </div>
-            )
-          )}
+                  <Markdown onOpenArtifact={setArtifact}>{message.content}</Markdown>
 
-          <ActivityTrail steps={thread.activity} busy={thread.busy} />
+                  {message.attachments
+                    // The stored copy of a website already shows as the card
+                    // above; listing the .html again would be the same thing twice.
+                    ?.filter((a) => a.kind === "file" && a.url && !isStoredSite(a, message.content))
+                    .map((a) => (
+                      <div
+                        key={a.id}
+                        className="vd-glass-control flex w-fit items-center gap-3 rounded-xl px-3.5 py-2 text-[13px]"
+                      >
+                        <span className="text-fg/80 font-medium">📄 {a.filename ?? "file"}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setArtifact({
+                              kind: "file",
+                              title: a.filename ?? "file",
+                              url: a.url ?? "",
+                              mime: a.mime,
+                            })
+                          }
+                          className="text-fg/55 hover:text-fg cursor-pointer text-[12px] font-semibold"
+                        >
+                          Open
+                        </button>
+                        <a
+                          href={a.url ?? "#"}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-fg/55 hover:text-fg text-[12px] font-semibold"
+                        >
+                          Download
+                        </a>
+                      </div>
+                    ))}
 
-          {thread.stream ? <Markdown>{thread.stream}</Markdown> : null}
-          {thread.busy && !thread.stream && !thread.activity.length ? <ThinkingLine /> : null}
-          {thread.error ? (
-            <button
-              type="button"
-              onClick={thread.dismissError}
-              className="text-left text-[13.5px] text-red-500/90"
-            >
-              {thread.error}
-            </button>
-          ) : null}
-          <div ref={bottomRef} />
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={speakingId === message.id}
+                      onClick={() => void playReply(message)}
+                      className="vd-glass-control text-fg/70 hover:text-fg flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] disabled:opacity-50"
+                    >
+                      <SpeakerIcon size={14} />
+                      {speakingId === message.id ? "Preparing…" : "Play reply"}
+                    </button>
+                    {message.usedTools ? (
+                      <span className="text-fg/40 text-[11.5px] font-medium">⚙ used tools</span>
+                    ) : null}
+                  </div>
+
+                  <AnswerActions
+                    answer={message.content}
+                    rating={ratings[message.id] ?? null}
+                    onRate={(rating) => {
+                      setRatings((prev) => ({ ...prev, [message.id]: rating }));
+                      setFeedbackFor(rating);
+                    }}
+                    onShare={() => setShareOpen(true)}
+                    onExport={() => setExportOpen(true)}
+                    onRename={() => setRenameOpen(true)}
+                    onAddToSpace={() => setSpaceOpen(true)}
+                    onReport={() => setReportOpen(true)}
+                    onDelete={() => setDeleteOpen(true)}
+                  />
+                </div>
+              )
+            )}
+
+            <ActivityTrail steps={thread.activity} busy={thread.busy} />
+
+            {thread.stream ? (
+              <Markdown onOpenArtifact={setArtifact} generating={generating}>
+                {thread.stream}
+              </Markdown>
+            ) : null}
+            {thread.busy && !thread.stream && !thread.activity.length ? <ThinkingLine /> : null}
+            {thread.error ? (
+              <button
+                type="button"
+                onClick={thread.dismissError}
+                className="text-left text-[13.5px] text-red-500/90"
+              >
+                {thread.error}
+              </button>
+            ) : null}
+            <div ref={bottomRef} />
+          </div>
         </div>
-      </div>
 
-      {/* The composer follows the thread rather than floating over it, so a
+        {/* The composer follows the thread rather than floating over it, so a
           long answer is never hidden behind it. */}
-      <div className="sticky bottom-0 px-5 pb-6">
-        <div className="mx-auto w-full max-w-[760px]">
-          <ChatComposer
-            value={prompt}
-            onValueChange={updatePrompt}
-            onSubmit={submit}
-            language={session.language}
-            busy={thread.busy}
-            onCancel={thread.cancel}
-            onAttachFile={attachFile}
-            attachment={pendingImage}
-            attachmentUploading={uploading}
-            onClearAttachment={() => setPendingImage(null)}
-            recording={thread.recording}
-            transcribing={thread.transcribing}
-            onToggleMic={thread.toggleMic}
-            onStartCall={thread.call.start}
-          />
+        <div className="sticky bottom-0 px-5 pb-6">
+          <div className="mx-auto w-full max-w-[760px]">
+            <ChatComposer
+              value={prompt}
+              onValueChange={updatePrompt}
+              onSubmit={submit}
+              language={session.language}
+              busy={thread.busy}
+              onCancel={thread.cancel}
+              onAttachFile={attachFile}
+              attachment={pendingImage}
+              attachmentUploading={uploading}
+              onClearAttachment={() => setPendingImage(null)}
+              recording={thread.recording}
+              transcribing={thread.transcribing}
+              onToggleMic={thread.toggleMic}
+              onStartCall={thread.call.start}
+            />
+          </div>
         </div>
       </div>
-
-    </div>
 
       {panelOpen && artifact ? (
         <ArtifactPanel
           artifact={artifact}
-          onClose={() => setArtifact(null)}
+          generating={generating}
+          onClose={closeArtifact}
           className="m-4 ml-0 w-[46%] max-w-[720px] min-w-[360px]"
         />
       ) : null}
@@ -478,7 +518,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
       <Modal
         open={artifact !== null && isMobile}
         onOpenChange={(open) => {
-          if (!open) setArtifact(null);
+          if (!open) closeArtifact();
         }}
         title={artifact?.title ?? "Artifact"}
         hideTitle
@@ -486,7 +526,12 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
         className="h-[85vh] p-0"
       >
         {artifact ? (
-          <ArtifactPanel artifact={artifact} onClose={() => setArtifact(null)} className="h-full" />
+          <ArtifactPanel
+            artifact={artifact}
+            generating={generating}
+            onClose={closeArtifact}
+            className="h-full"
+          />
         ) : null}
       </Modal>
 

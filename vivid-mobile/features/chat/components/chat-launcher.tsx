@@ -64,7 +64,7 @@ export function ChatLauncher({ isFirstRun = false }: ChatLauncherProps) {
       });
       setValue("");
       setPendingImage(null);
-      router.push({ pathname: "/thread/[id]", params: { id: chat.id } });
+      router.replace({ pathname: "/thread/[id]", params: { id: chat.id } });
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not start a chat");
     } finally {
@@ -80,7 +80,7 @@ export function ChatLauncher({ isFirstRun = false }: ChatLauncherProps) {
     try {
       const chat = await backend.createChat(language);
       stashPendingCall(chat.id);
-      router.push({ pathname: "/thread/[id]", params: { id: chat.id } });
+      router.replace({ pathname: "/thread/[id]", params: { id: chat.id } });
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not start a call");
     } finally {

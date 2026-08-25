@@ -1,6 +1,6 @@
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Image,
   Linking,
@@ -17,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Glass } from "@/components/ui/glass";
 import { IconButton } from "@/components/ui/icon-button";
-import { CheckIcon, CloseIcon, CopyIcon, DownloadIcon } from "@/components/ui/icons";
+import { CheckIcon, CloseIcon, CopyIcon, DownloadIcon, RefreshIcon } from "@/components/ui/icons";
+import { Spinner } from "@/components/ui/spinner";
 import { AppText } from "@/components/ui/text";
 import { fileExtension, isPreviewable, type Artifact } from "@/features/chat/lib/artifacts";
 import { useTheme } from "@/hooks/use-theme";
@@ -27,6 +28,9 @@ import { toast } from "@/lib/toast";
 
 interface ArtifactPanelProps {
   artifact: Artifact | null;
+  // The reply is still streaming this artifact's code: show it arriving,
+  // then flip to the preview the moment it is complete.
+  generating?: boolean;
   onClose: () => void;
 }
 
@@ -34,13 +38,27 @@ interface ArtifactPanelProps {
 // chat; on a phone it rises over it as a full sheet. Code gets copy, save and
 // (for HTML) a sandboxed live preview; files open inline where the OS can
 // render them.
-export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
+export function ArtifactPanel({ artifact, generating = false, onClose }: ArtifactPanelProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const open = artifact !== null;
   const previewable = artifact?.kind === "code" && isPreviewable(artifact.language);
   const [view, setView] = useState<"preview" | "code">("preview");
-  const showPreview = previewable && view === "preview";
+  const [refreshKey, setRefreshKey] = useState(0);
+  const codeScroll = useRef<ScrollView>(null);
+  const showPreview = previewable && view === "preview" && !generating;
+
+  // Code streams in while building; follow it. When the build finishes, the
+  // page is what matters, so switch to the preview without being asked.
+  const wasGenerating = useRef(generating);
+  useEffect(() => {
+    if (generating) codeScroll.current?.scrollToEnd({ animated: false });
+    if (wasGenerating.current && !generating && previewable) {
+      setView("preview");
+      setRefreshKey((key) => key + 1);
+    }
+    wasGenerating.current = generating;
+  }, [generating, previewable, artifact]);
 
   const { copied, copy: copyToClipboard } = useCopy();
   async function copy() {
@@ -107,6 +125,7 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
                   borderBottomColor: theme.fg(0.08),
                 }}
               >
+                {generating ? <Spinner size="small" /> : null}
                 <AppText
                   size={13.5}
                   weight="semibold"
@@ -114,9 +133,18 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
                   numberOfLines={1}
                   style={{ flex: 1 }}
                 >
-                  {artifact.title}
+                  {generating ? "Building your website…" : artifact.title}
                 </AppText>
-                {previewable ? (
+                {showPreview ? (
+                  <IconButton
+                    label="Reload preview"
+                    size={32}
+                    onPress={() => setRefreshKey((key) => key + 1)}
+                  >
+                    <RefreshIcon size={15} color={theme.fg(0.6)} />
+                  </IconButton>
+                ) : null}
+                {previewable && !generating ? (
                   <View style={{ flexDirection: "row", gap: 4 }}>
                     <Chip
                       size="sm"
@@ -157,13 +185,14 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
                 {artifact.kind === "code" ? (
                   showPreview ? (
                     <WebView
+                      key={refreshKey}
                       originWhitelist={["*"]}
                       source={{ html: artifact.content }}
                       javaScriptEnabled
                       style={{ flex: 1, backgroundColor: "#ffffff" }}
                     />
                   ) : (
-                    <ScrollView>
+                    <ScrollView ref={codeScroll}>
                       <ScrollView horizontal>
                         <AppText
                           mono
@@ -184,7 +213,7 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
                     style={{ flex: 1, margin: 12 }}
                     resizeMode="contain"
                   />
-                ) : artifact.mime === "application/pdf" ? (
+                ) : artifact.mime === "application/pdf" || artifact.mime === "text/html" ? (
                   <WebView source={{ uri: artifact.url }} style={{ flex: 1 }} />
                 ) : (
                   <View

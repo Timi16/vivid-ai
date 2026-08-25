@@ -9,7 +9,8 @@ import MarkdownDisplay, {
 import { CheckIcon, CopyIcon } from "@/components/ui/icons";
 import { AppText } from "@/components/ui/text";
 import { TexMath } from "@/features/chat/components/math";
-import type { Artifact } from "@/features/chat/lib/artifacts";
+import { ArtifactCard } from "@/features/chat/components/artifact-card";
+import { isPreviewable, titleOf, type Artifact } from "@/features/chat/lib/artifacts";
 import { markdownMath } from "@/features/chat/lib/markdown-math";
 import { useTheme } from "@/hooks/use-theme";
 import { useCopy } from "@/hooks/use-copy";
@@ -20,6 +21,8 @@ interface MarkdownProps {
   // When given, fenced code blocks get an "Open" action that hands the block
   // to the artifact panel.
   onOpenArtifact?: (artifact: Artifact) => void;
+  // The reply is still streaming and its html fence has not closed yet.
+  generating?: boolean;
 }
 
 // One parser for every message. GFM tables and strikethrough come with the
@@ -30,7 +33,7 @@ const parser = new MarkdownIt({ typographer: true, linkify: true }).use(markdown
 // Assistant text is markdown (the model is prompted to use code blocks,
 // lists, tables, and LaTeX math). Math renders through MathJax to SVG, so it
 // sits inside the thread typography rather than looking pasted in.
-export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
+export function Markdown({ children, onOpenArtifact, generating = false }: MarkdownProps) {
   const { theme } = useTheme();
 
   const styles = useMemo(() => {
@@ -111,14 +114,24 @@ export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
   // "Open" action. Math tokens render through MathJax.
   const rules = useMemo<RenderRules>(
     () => ({
-      fence: (node: ASTNode) => (
-        <CodeBlock
-          key={node.key}
-          language={fenceLanguage(node)}
-          code={String(node.content ?? "").replace(/\n$/, "")}
-          onOpen={onOpenArtifact}
-        />
-      ),
+      fence: (node: ASTNode) => {
+        const language = fenceLanguage(node);
+        const code = String(node.content ?? "").replace(/\n$/, "");
+        if (onOpenArtifact && isPreviewable(language)) {
+          const title = titleOf(code);
+          return (
+            <ArtifactCard
+              key={node.key}
+              title={title}
+              generating={generating}
+              onPress={() =>
+                onOpenArtifact({ kind: "code", title, language: "html", content: code })
+              }
+            />
+          );
+        }
+        return <CodeBlock key={node.key} language={language} code={code} onOpen={onOpenArtifact} />;
+      },
       code_block: (node: ASTNode) => (
         <CodeBlock
           key={node.key}
@@ -132,7 +145,7 @@ export function Markdown({ children, onOpenArtifact }: MarkdownProps) {
         <TexMath key={node.key} tex={String(node.content ?? "")} display />
       ),
     }),
-    [onOpenArtifact]
+    [onOpenArtifact, generating]
   );
 
   return (

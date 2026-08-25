@@ -6,7 +6,7 @@ import { SpeakerIcon } from "@/components/ui/icons";
 import { Textarea } from "@/components/ui/input";
 import { AppText } from "@/components/ui/text";
 import { Markdown } from "@/features/chat/components/markdown";
-import type { Artifact } from "@/features/chat/lib/artifacts";
+import { extractHtmlArtifact, type Artifact } from "@/features/chat/lib/artifacts";
 import type { LiveMessage, MessageAttachment } from "@/features/chat/lib/types";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -137,7 +137,13 @@ export function AssistantBubble({
   actions,
 }: AssistantBubbleProps) {
   const { theme } = useTheme();
-  const files = message.attachments?.filter((a) => a.kind === "file" && a.url) ?? [];
+  // The stored copy of a website already shows as the card in the markdown;
+  // listing the .html again would be the same thing twice.
+  const hasSite = extractHtmlArtifact(message.content) !== null;
+  const files =
+    message.attachments?.filter(
+      (a) => a.kind === "file" && a.url && !(hasSite && a.mime === "text/html")
+    ) ?? [];
   return (
     <View style={{ gap: 14 }}>
       <AttachedImages attachments={message.attachments} onView={onViewImage} max={300} />

@@ -19,6 +19,7 @@ const FILTERS: { value: Filter; label: string }[] = [
 ];
 
 function iconFor(artifact: ArtifactOut): string {
+  if (artifact.mime === "text/html") return "🌐";
   if (artifact.mime === "application/pdf") return "📕";
   if (artifact.mime.startsWith("text/csv")) return "📊";
   if (artifact.mime.startsWith("image/")) return "🖼";
@@ -62,8 +63,8 @@ export function GeneratedFilesView() {
           ) : null}
           {data && shown.length === 0 ? (
             <p className="text-fg/45 py-10 text-center text-[13.5px]">
-              Nothing here yet. Ask Vivid to convert a file, make a chart, or export a CSV and
-              it will show up here.
+              Nothing here yet. Ask Vivid to convert a file, make a chart, or export a CSV and it
+              will show up here.
             </p>
           ) : null}
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -71,7 +72,11 @@ export function GeneratedFilesView() {
               <li key={item.id} className="vd-glass-card flex flex-col gap-3 p-4">
                 {item.kind === "image" ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={item.url} alt={item.filename ?? ""} className="h-36 w-full rounded-lg object-cover" />
+                  <img
+                    src={item.url}
+                    alt={item.filename ?? ""}
+                    className="h-36 w-full rounded-lg object-cover"
+                  />
                 ) : (
                   <div className="bg-fg/5 grid h-36 place-items-center rounded-lg text-4xl">
                     {iconFor(item)}

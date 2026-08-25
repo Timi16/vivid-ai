@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import { Menu, MenuLabel } from "@/components/ui/menu";
 import { BellIcon } from "@/components/ui/icons";
@@ -73,6 +75,14 @@ export function NotificationsMenu() {
               ) : null}
             </div>
             <span className="text-fg/50 text-[11.5px] leading-snug font-normal">{item.detail}</span>
+            {item.chatId ? (
+              <Link
+                href={`/thread/${item.chatId}`}
+                className="text-fg/60 hover:text-fg mt-0.5 w-fit text-[11.5px] font-semibold"
+              >
+                Open thread
+              </Link>
+            ) : null}
           </div>
         ))}
       </div>

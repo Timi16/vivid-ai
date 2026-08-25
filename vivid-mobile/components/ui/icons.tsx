@@ -806,3 +806,24 @@ export function GoogleMark({ size = 17 }: IconProps) {
 }
 
 export type IconComponent = (props: IconProps) => React.ReactNode;
+
+export function RefreshIcon({ size, color }: IconProps) {
+  const stroke = useStroke(color);
+  return (
+    <Frame size={size}>
+      <Path
+        d="M20 12a8 8 0 1 1-2.34-5.66"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M20 4v4.5h-4.5"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Frame>
+  );
+}
