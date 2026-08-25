@@ -11,19 +11,16 @@ import { ArrowLeftIcon, SearchIcon, SidebarIcon } from "@/components/ui/icons";
 import { AppText } from "@/components/ui/text";
 import { useTheme } from "@/hooks/use-theme";
 
-// The header for every screen behind the drawer: the drawer toggle, the
-// topic strip (preview only), search, and notifications. A thread keeps the
-// same header: it lives inside the shell, like the web, so there is no back
-// arrow that would take the reader out of a conversation they just started.
-const SECONDARY_ROUTES = new Set(["notifications", "upgrade"]);
+// The header for every screen behind the drawer: back (whenever there is
+// somewhere to go back to), the drawer toggle, the topic strip (preview
+// only), search, and notifications. Home has nothing behind it, so it shows
+// the menu button alone.
 
 export function Topbar({ navigation, route }: DrawerHeaderProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  // Pages you are sent to rather than live in (notifications) get a back
-  // arrow. The thread and the main pages keep the drawer button.
-  const secondary = SECONDARY_ROUTES.has(route.name);
+  const canGoBack = route.name !== "index" && router.canGoBack();
   const params = route.params as { topic?: string } | undefined;
   const activeTopic = route.name === "discover" ? (params?.topic ?? "discover") : null;
 
@@ -40,15 +37,14 @@ export function Topbar({ navigation, route }: DrawerHeaderProps) {
         borderBottomColor: theme.fg(0.08),
       }}
     >
-      {secondary && router.canGoBack() ? (
+      {canGoBack ? (
         <IconButton label="Back" onPress={() => router.back()}>
           <ArrowLeftIcon size={20} color={theme.fg(0.7)} />
         </IconButton>
-      ) : (
-        <IconButton label="Open menu" onPress={() => navigation.toggleDrawer()}>
-          <SidebarIcon size={18} color={theme.fg(0.7)} />
-        </IconButton>
-      )}
+      ) : null}
+      <IconButton label="Open menu" onPress={() => navigation.toggleDrawer()}>
+        <SidebarIcon size={18} color={theme.fg(0.7)} />
+      </IconButton>
 
       {topicNav.length ? (
         <ScrollView
