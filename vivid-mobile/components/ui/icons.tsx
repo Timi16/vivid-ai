@@ -805,6 +805,22 @@ export function GoogleMark({ size = 17 }: IconProps) {
   );
 }
 
+// KingsChat's mark: a chat bubble under a crown, in the brand gold.
+export function KingsChatMark({ size = 17 }: IconProps) {
+  return (
+    <Frame size={size}>
+      <Path
+        d="M3.6 5.2 6.4 8l3.1-3.9a3 3 0 0 1 4.9 0L17.6 8l2.8-2.8c.7-.7 1.8-.1 1.6.9l-1.7 7.6a2 2 0 0 1-2 1.6H5.7a2 2 0 0 1-2-1.6L2 6.1c-.2-1 .9-1.6 1.6-.9Z"
+        fill="#F7B500"
+      />
+      <Path
+        d="M6.5 18.4h11a5.5 5.5 0 0 1-5.5 3.4 5.5 5.5 0 0 1-5.5-3.4Z"
+        fill="#C98F00"
+      />
+    </Frame>
+  );
+}
+
 export type IconComponent = (props: IconProps) => React.ReactNode;
 
 export function RefreshIcon({ size, color }: IconProps) {

@@ -7,6 +7,8 @@ x-backend-env: &backend-env
   S3_SECRET_KEY: minioadmin
   S3_BUCKET: vivid
   JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+  # The smoke test needs a session without a real inbox. Dev only.
+  ALLOW_PASSWORD_AUTH: ${ALLOW_PASSWORD_AUTH:-true}
   DECANE_APP_ID: ${DECANE_APP_ID:-}
   DECANE_VERIFICATION_KEY: ${DECANE_VERIFICATION_KEY:-}
   # RunPod model services — set these in a root .env (see .env.example)

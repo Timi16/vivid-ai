@@ -1,22 +1,14 @@
 // Sign-in form rules. Pure, so they are unit tested and the component only
 // renders what these return. Identical to the web app.
 
-// Deliberately permissive. The authoritative check is the backend; a clever
-// regex here only rejects addresses that are actually valid.
+// Deliberately permissive. The authoritative check is the code we email; a
+// clever regex here only rejects addresses that are actually valid.
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function validateEmail(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return "Enter your email address.";
   if (!EMAIL.test(trimmed)) return "That doesn't look like an email address.";
-  return null;
-}
-
-export const MIN_PASSWORD_LENGTH = 8;
-
-export function validatePassword(value: string): string | null {
-  if (value.length < MIN_PASSWORD_LENGTH)
-    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
   return null;
 }
 

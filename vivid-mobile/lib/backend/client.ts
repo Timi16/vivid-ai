@@ -197,10 +197,6 @@ export interface LocalFile {
 }
 
 export const backend = {
-  signup: (email: string, password: string) =>
-    request<TokenBundle>("/auth/signup", { method: "POST", json: { email, password } }),
-  login: (email: string, password: string) =>
-    request<TokenBundle>("/auth/login", { method: "POST", json: { email, password } }),
   // Social sign-in: exchange a Decane access token for our own session. The
   // Google profile (display-only) rides along so the account gets a name.
   decaneLogin: (accessToken: string, profile: GoogleProfile = {}) =>

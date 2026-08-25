@@ -1,20 +1,35 @@
 import { Pressable } from "react-native";
 
 import { Glass } from "@/components/ui/glass";
-import { GoogleMark } from "@/components/ui/icons";
+import { GoogleMark, KingsChatMark } from "@/components/ui/icons";
 import { AppText } from "@/components/ui/text";
 
 interface ProviderButtonProps {
-  provider: "google";
+  provider: "google" | "kingschat";
   onPress?: () => void;
   disabled?: boolean;
+  // Renders the button as an announced-but-unbuilt option: still pressable,
+  // so the tap can explain itself, but visibly not ready.
+  comingSoon?: boolean;
 }
 
 const LABEL = {
   google: "Continue with Google",
+  kingschat: "Continue with KingsChat",
 };
 
-export function ProviderButton({ provider, onPress, disabled }: ProviderButtonProps) {
+const MARK = {
+  google: GoogleMark,
+  kingschat: KingsChatMark,
+};
+
+export function ProviderButton({
+  provider,
+  onPress,
+  disabled,
+  comingSoon,
+}: ProviderButtonProps) {
+  const Mark = MARK[provider];
   return (
     <Pressable
       accessibilityRole="button"
@@ -35,7 +50,7 @@ export function ProviderButton({ provider, onPress, disabled }: ProviderButtonPr
           gap: 10,
         }}
       >
-        <GoogleMark size={17} />
+        <Mark size={17} />
         <AppText size={13.5} weight="semibold">
           {LABEL[provider]}
         </AppText>

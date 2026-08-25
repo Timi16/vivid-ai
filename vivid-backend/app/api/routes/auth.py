@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.core.config import settings
 from app.core.security import (create_token_pair, decode_token, hash_password,
                                verify_password)
 from app.db.models import User
@@ -23,8 +24,16 @@ def _pair(user: User) -> TokenPairOut:
     return TokenPairOut(**create_token_pair(user.id), user=user)
 
 
+def _require_password_auth() -> None:
+    """Passwords are a test-only path. In the product, people sign in with
+    Google or an emailed code through Decane."""
+    if not settings.ALLOW_PASSWORD_AUTH:
+        raise HTTPException(status_code=404, detail="Password sign-in is disabled")
+
+
 @router.post("/signup", response_model=TokenPairOut, status_code=201)
 async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
+    _require_password_auth()
     email = body.email.lower()
     existing = (await db.execute(
         select(User).where(User.email == email))).scalar_one_or_none()
@@ -38,6 +47,7 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenPairOut)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+    _require_password_auth()
     user = (await db.execute(
         select(User).where(User.email == body.email.lower()))).scalar_one_or_none()
     if user is None or not verify_password(body.password, user.password_hash):

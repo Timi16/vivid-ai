@@ -45,18 +45,53 @@ function AppleMark() {
   );
 }
 
+// KingsChat's mark: a chat bubble under a crown, drawn to sit at the same
+// weight as the other provider marks.
+function KingsChatMark() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M3.6 5.2 6.4 8l3.1-3.9a3 3 0 0 1 4.9 0L17.6 8l2.8-2.8c.7-.7 1.8-.1 1.6.9l-1.7 7.6a2 2 0 0 1-2 1.6H5.7a2 2 0 0 1-2-1.6L2 6.1c-.2-1 .9-1.6 1.6-.9Z"
+        fill="currentColor"
+        opacity="0.9"
+      />
+      <path
+        d="M6.5 18.4h11a5.5 5.5 0 0 1-5.5 3.4 5.5 5.5 0 0 1-5.5-3.4Z"
+        fill="currentColor"
+        opacity="0.55"
+      />
+    </svg>
+  );
+}
+
 interface ProviderButtonProps {
-  provider: "google" | "apple";
+  provider: "google" | "apple" | "kingschat";
   onClick?: () => void;
   disabled?: boolean;
+  // Renders the button as an announced-but-unbuilt option: still pressable,
+  // so the click can explain itself, but visibly not ready.
+  comingSoon?: boolean;
 }
 
 const LABEL = {
   google: "Continue with Google",
   apple: "Continue with Apple",
+  kingschat: "Continue with KingsChat",
 };
 
-export function ProviderButton({ provider, onClick, disabled }: ProviderButtonProps) {
+const MARK = {
+  google: GoogleMark,
+  apple: AppleMark,
+  kingschat: KingsChatMark,
+};
+
+export function ProviderButton({
+  provider,
+  onClick,
+  disabled,
+  comingSoon,
+}: ProviderButtonProps) {
+  const Mark = MARK[provider];
   return (
     <button
       type="button"
@@ -69,8 +104,13 @@ export function ProviderButton({ provider, onClick, disabled }: ProviderButtonPr
         "focus-visible:outline-ring focus-visible:outline-2 focus-visible:outline-offset-2"
       )}
     >
-      {provider === "google" ? <GoogleMark /> : <AppleMark />}
+      <Mark />
       {LABEL[provider]}
+      {comingSoon ? (
+        <span className="bg-fg/10 text-fg/50 rounded-full px-2 py-0.5 text-[10.5px] font-semibold tracking-wide uppercase">
+          Soon
+        </span>
+      ) : null}
     </button>
   );
 }

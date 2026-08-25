@@ -8,13 +8,16 @@ import { AppText } from "@/components/ui/text";
 import { AuthCard } from "@/features/auth/components/auth-card";
 import { CODE_LENGTH, normaliseCode, validateCode } from "@/features/auth/lib/validation";
 import { useTheme } from "@/hooks/use-theme";
+import { backend, setTokens } from "@/lib/backend/client";
+import { startEmailSignIn, verifyEmailCode } from "@/lib/backend/decane";
 import { RADIUS } from "@/lib/theme";
 
 const RESEND_SECONDS = 30;
 
 // Six boxes over one invisible input. The input is the real control, so
 // paste, SMS autofill and the keyboard all behave; the boxes are presentation.
-// Not wired to a verification endpoint yet, exactly like the web.
+// The code buys a Decane access token, which our backend verifies to open a
+// Vivid session; the root stack's guard then takes over.
 export function VerifyForm({ email }: { email?: string }) {
   const router = useRouter();
   const { theme } = useTheme();
@@ -30,12 +33,37 @@ export function VerifyForm({ email }: { email?: string }) {
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 
-  function submit() {
+  async function submit() {
     const problem = validateCode(code);
     setError(problem);
     if (problem) return;
+    if (!email) {
+      setError("Start again so we know which address to check.");
+      return;
+    }
     setSubmitting(true);
-    router.push("/onboarding");
+    try {
+      const { jwt, profile } = await verifyEmailCode(email, code);
+      const tokens = await backend.decaneLogin(jwt, profile);
+      setTokens(tokens);
+    } catch (err) {
+      setSubmitting(false);
+      setError(err instanceof Error ? err.message : "That code did not work");
+    }
+  }
+
+  async function resend() {
+    if (!email) {
+      router.replace("/sign-in");
+      return;
+    }
+    setError(null);
+    setSecondsLeft(RESEND_SECONDS);
+    try {
+      await startEmailSignIn(email);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send a new code");
+    }
   }
 
   return (
@@ -113,7 +141,7 @@ export function VerifyForm({ email }: { email?: string }) {
           label="Verify and continue"
           fullWidth
           loading={submitting}
-          onPress={submit}
+          onPress={() => void submit()}
         />
 
         {secondsLeft > 0 ? (
@@ -123,7 +151,7 @@ export function VerifyForm({ email }: { email?: string }) {
         ) : (
           <Pressable
             accessibilityRole="button"
-            onPress={() => setSecondsLeft(RESEND_SECONDS)}
+            onPress={() => void resend()}
             style={{ alignItems: "center" }}
           >
             <AppText size={12.5} tone={0.7} style={{ textDecorationLine: "underline" }}>

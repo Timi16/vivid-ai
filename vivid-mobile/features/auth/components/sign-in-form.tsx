@@ -1,5 +1,6 @@
+import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -8,35 +9,37 @@ import { Input } from "@/components/ui/input";
 import { AppText } from "@/components/ui/text";
 import { AuthCard } from "@/features/auth/components/auth-card";
 import { ProviderButton } from "@/features/auth/components/provider-buttons";
-import { validateEmail, validatePassword } from "@/features/auth/lib/validation";
+import { validateEmail } from "@/features/auth/lib/validation";
 import { useTheme } from "@/hooks/use-theme";
 import { backend, setTokens } from "@/lib/backend/client";
-import { decaneConfigured, signInWithGoogle } from "@/lib/backend/decane";
+import { decaneConfigured, signInWithGoogle, startEmailSignIn } from "@/lib/backend/decane";
 
-// Email + password against the live backend. One form serves both directions:
-// sign in by default, flip to create an account. Google runs through the
-// system auth sheet and lands on the same session: identity only, no wallet,
-// so no passkey prompt.
+const NOT_CONFIGURED =
+  "Sign-in isn't configured yet (set EXPO_PUBLIC_DECANE_APP_ID and EXPO_PUBLIC_DECANE_API_KEY).";
+
+// Passwordless. Identity is Decane's job: Google through the system auth
+// sheet, or a code emailed to the address you type. Nothing here ever holds a
+// password.
 //
-// There is no navigation on success: setting the tokens flips the root
-// stack's guard and the app shell takes over.
+// There is no navigation on a Google success: setting the tokens flips the
+// root stack's guard and the app shell takes over. The email path needs the
+// code screen first.
 export function SignInForm() {
+  const router = useRouter();
   const { theme } = useTheme();
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [finishingGoogle, setFinishingGoogle] = useState(false);
 
   async function googleSignIn() {
     if (!decaneConfigured) {
-      setError(
-        "Google sign-in isn't configured yet (set EXPO_PUBLIC_DECANE_APP_ID and EXPO_PUBLIC_DECANE_API_KEY)."
-      );
+      setError(NOT_CONFIGURED);
       return;
     }
     setError(null);
+    setNotice(null);
     setSubmitting(true);
     try {
       const returned = await signInWithGoogle();
@@ -57,29 +60,33 @@ export function SignInForm() {
     }
   }
 
-  async function submit() {
-    const problem = validateEmail(email) ?? validatePassword(password);
+  async function emailSignIn() {
+    const problem = validateEmail(email);
     if (problem) {
       setError(problem);
       return;
     }
+    if (!decaneConfigured) {
+      setError(NOT_CONFIGURED);
+      return;
+    }
     setError(null);
+    setNotice(null);
     setSubmitting(true);
+    const address = email.trim().toLowerCase();
     try {
-      const tokens =
-        mode === "login"
-          ? await backend.login(email.trim(), password)
-          : await backend.signup(email.trim(), password);
-      setTokens(tokens);
+      await startEmailSignIn(address);
+      router.push({ pathname: "/verify", params: { email: address } });
     } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send the code");
+    } finally {
       setSubmitting(false);
-      setError(err instanceof Error ? err.message : "Sign in failed");
     }
   }
 
   return (
     <AuthCard
-      title={mode === "login" ? "Sign in to Vivid" : "Create your Vivid account"}
+      title="Sign in to Vivid"
       subtitle="Ask anything, and see it come to life."
       footer={
         <AppText size={12.5} weight="regular" tone={0.45} align="center">
@@ -100,7 +107,24 @@ export function SignInForm() {
           Finishing Google sign-in…
         </AppText>
       ) : null}
-      <ProviderButton provider="google" onPress={googleSignIn} disabled={submitting} />
+
+      <View style={{ gap: 10 }}>
+        <ProviderButton provider="google" onPress={googleSignIn} disabled={submitting} />
+        <ProviderButton
+          provider="kingschat"
+          comingSoon
+          onPress={() => {
+            setError(null);
+            setNotice("KingsChat sign-in is coming soon. Use Google or your email for now.");
+          }}
+        />
+      </View>
+
+      {notice ? (
+        <AppText size={12.5} tone={0.55} align="center" style={{ marginTop: 12 }}>
+          {notice}
+        </AppText>
+      ) : null}
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 20 }}>
         <View style={{ flex: 1, height: 1, backgroundColor: theme.fg(0.1) }} />
@@ -120,51 +144,30 @@ export function SignInForm() {
             onChangeText={(value) => {
               setEmail(value);
               if (error) setError(null);
+              if (notice) setNotice(null);
             }}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="email"
             textContentType="emailAddress"
-            returnKeyType="next"
-          />
-        </Field>
-
-        <Field label="Password">
-          <Input
-            placeholder="At least 8 characters"
-            value={password}
-            secureTextEntry
-            autoCapitalize="none"
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-            textContentType={mode === "login" ? "password" : "newPassword"}
-            onChangeText={(value) => {
-              setPassword(value);
-              if (error) setError(null);
-            }}
             returnKeyType="go"
-            onSubmitEditing={() => void submit()}
+            onSubmitEditing={() => void emailSignIn()}
           />
         </Field>
 
         <Button
-          label={mode === "login" ? "Sign in" : "Create account"}
+          label="Continue with email"
           loading={submitting && !finishingGoogle}
           disabled={submitting}
           fullWidth
-          onPress={() => void submit()}
+          onPress={() => void emailSignIn()}
         />
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => setMode((prev) => (prev === "login" ? "signup" : "login"))}
-        style={{ marginTop: 16, alignItems: "center" }}
-      >
-        <AppText size={13} tone={0.6}>
-          {mode === "login" ? "No account? Create one" : "Have an account? Sign in"}
-        </AppText>
-      </Pressable>
+      <AppText size={12.5} weight="regular" tone={0.45} align="center" style={{ marginTop: 16 }}>
+        We email you a six-digit code. No password to remember.
+      </AppText>
     </AuthCard>
   );
 }

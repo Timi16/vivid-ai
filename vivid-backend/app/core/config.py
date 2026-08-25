@@ -13,6 +13,10 @@ class Settings(BaseSettings):
 
     # Auth
     JWT_SECRET: str = "change-me-in-prod"
+    # Identity is Decane's job: Google and emailed codes, no passwords. The
+    # email+password endpoints remain only so automated tests can mint a
+    # session without a real inbox. Never enable this in production.
+    ALLOW_PASSWORD_AUTH: bool = False
     # Decane Connect (handles "Continue with Google" — no Google Cloud
     # registration needed). App/project id from the Decane dashboard; empty
     # disables the social login endpoint.

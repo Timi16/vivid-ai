@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AuthCard } from "@/features/auth/components/auth-card";
 import { CODE_LENGTH, normaliseCode, validateCode } from "@/features/auth/lib/validation";
+import { backend, setTokens } from "@/lib/backend/client";
+import { startEmailSignIn, verifyEmailCode } from "@/lib/backend/decane";
 
 const RESEND_SECONDS = 30;
 
@@ -15,7 +17,7 @@ const RESEND_SECONDS = 30;
 export function VerifyForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const email = params.get("email") ?? "your email";
+  const email = params.get("email") ?? "";
 
   const inputRef = useRef<HTMLInputElement>(null);
   const [code, setCode] = useState("");
@@ -29,20 +31,48 @@ export function VerifyForm() {
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 
-  function onSubmit(event: React.FormEvent) {
+  async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     const problem = validateCode(code);
     setError(problem);
     if (problem) return;
+    if (!email) {
+      setError("Start again so we know which address to check.");
+      return;
+    }
 
     setSubmitting(true);
-    router.push("/onboarding");
+    try {
+      // The code buys a Decane access token; our backend verifies it and
+      // opens the Vivid session.
+      const { jwt, profile } = await verifyEmailCode(email, code);
+      const tokens = await backend.decaneLogin(jwt, profile);
+      setTokens(tokens);
+      router.push("/");
+    } catch (err) {
+      setSubmitting(false);
+      setError(err instanceof Error ? err.message : "That code did not work");
+    }
+  }
+
+  async function resend() {
+    if (!email) {
+      router.push("/sign-in");
+      return;
+    }
+    setError(null);
+    setSecondsLeft(RESEND_SECONDS);
+    try {
+      await startEmailSignIn(email);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send a new code");
+    }
   }
 
   return (
     <AuthCard
       title="Check your email"
-      subtitle={`We sent a ${CODE_LENGTH}-digit code to ${email}.`}
+      subtitle={`We sent a ${CODE_LENGTH}-digit code to ${email || "your email"}.`}
       footer={
         <button
           type="button"
@@ -118,7 +148,7 @@ export function VerifyForm() {
           ) : (
             <button
               type="button"
-              onClick={() => setSecondsLeft(RESEND_SECONDS)}
+              onClick={() => void resend()}
               className="text-fg/70 hover:text-fg cursor-pointer underline underline-offset-2"
             >
               Send a new code
