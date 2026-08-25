@@ -68,6 +68,20 @@ class Settings(BaseSettings):
     # vivid-tools browser service (Playwright); empty disables browse_page
     VIVID_TOOLS_URL: str = ""
     VIVID_TOOLS_TOKEN: str = ""
+    # --- partner browsing API (/v1/browser) ---
+    # Concurrent browser sessions one API key may hold. The tier's own ceiling
+    # is BROWSER_max_sessions in vivid-tools; this stops a single partner
+    # taking all of it. Overridable per key on the api_keys row.
+    BROWSER_SESSIONS_PER_KEY: int = 3
+    # Seconds a session may sit idle before it is reaped. Longer than
+    # vivid-tools' own default because an authenticated session is expensive
+    # to rebuild — losing one means redoing a login.
+    BROWSER_SESSION_TTL: int = 900
+    BROWSER_SESSION_TTL_MAX: int = 3600
+    # Steps a managed browsing task may take. The chat tool keeps its own,
+    # tighter budget (a chat turn cannot wait for 20 page loads).
+    BROWSER_TASK_MAX_STEPS: int = 30
+    BROWSER_TASK_DEFAULT_STEPS: int = 8
     # WORKAROUND, not a design rule: tools are skipped for these languages
     # while MADLAD translation is unreliable — the answer falls back to
     # English anyway, so the planner call buys nothing visible.

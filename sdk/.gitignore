@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+
+# TypeScript
+node_modules/
+typescript/dist/
+
+# Example output — an authenticated storage_state is a credential
+session-state.json

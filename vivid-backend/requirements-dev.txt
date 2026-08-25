@@ -1,0 +1,5 @@
+# Test-only dependencies. The runtime set is requirements.txt.
+pytest>=8
+pytest-asyncio>=0.24
+# The SDK contract tests import vivid_ai; install it editable from the repo:
+#   pip install -e ../sdk/python

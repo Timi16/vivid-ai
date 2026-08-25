@@ -55,6 +55,12 @@ health: ## Backend health check
 models: ## Model services (RunPod) health check
 	@curl -s http://localhost:8000/v1/health/models | python3 -m json.tool
 
+test: ## Unit tests: backend, vivid-tools, and both SDKs
+	$(COMPOSE) exec -T backend python -m pytest -q
+	cd vivid-tools && python -m pytest -q
+	cd sdk/python && python -m pytest -q
+	cd sdk/typescript && npm test
+
 smoke: ## End-to-end API smoke test (needs the stack up)
 	$(COMPOSE) exec -T backend python -m app.scripts.smoke_test
 

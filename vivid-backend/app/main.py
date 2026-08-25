@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import api_router
+from app.core import errors
 from app.core.config import settings
 from app.db.session import init_db
 from app.services import storage
@@ -41,12 +42,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION,
               lifespan=lifespan)
 
+# One error shape for every route, plus a request id on every response.
+errors.install(app)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[errors.REQUEST_ID_HEADER],
 )
 
 # REST is versioned from day one (spec section 6) so partner APIs can be added
