@@ -1,10 +1,16 @@
 //! What Vivid Code shows. Every write goes through `screen` so the prompt box
 //! stays pinned at the bottom while this output scrolls above it.
+use crate::jsonio;
 use crate::screen;
 use owo_colors::OwoColorize;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 pub fn banner(root: &str) {
+    if jsonio::enabled() {
+        // The editor's cue that the engine resolved and the agent is usable.
+        jsonio::emit("ready", json!({"root": root, "version": env!("CARGO_PKG_VERSION")}));
+        return;
+    }
     screen::line("");
     screen::line(&format!(
         "  {}  {}",
@@ -17,6 +23,9 @@ pub fn banner(root: &str) {
 
 /// Echo the submitted prompt into scrollback, the way the box showed it.
 pub fn user_echo(text: &str) {
+    if jsonio::enabled() {
+        return; // the editor drew the user's own message already
+    }
     for (i, line) in text.lines().enumerate() {
         let marker = if i == 0 { "›".magenta().bold().to_string() } else { " ".to_string() };
         screen::line(&format!("{marker} {line}"));
@@ -25,6 +34,10 @@ pub fn user_echo(text: &str) {
 }
 
 pub fn busy(label: &str) {
+    if jsonio::enabled() {
+        jsonio::emit("busy", json!({"label": label}));
+        return;
+    }
     screen::busy(label);
 }
 
@@ -48,6 +61,12 @@ impl Reply {
     }
 
     pub fn token(&mut self, t: &str) {
+        if jsonio::enabled() {
+            // Raw tokens: the editor renders its own markdown.
+            self.started = true;
+            jsonio::emit("token", json!({"text": t}));
+            return;
+        }
         self.started = true;
         let (lines, tail) = self.md.push(t);
         for l in lines {
@@ -69,6 +88,12 @@ impl Reply {
     }
 
     pub fn finish(&mut self) {
+        if jsonio::enabled() {
+            if self.started {
+                jsonio::emit("reply_end", json!({}));
+            }
+            return;
+        }
         if let Some(last) = self.md.finish() {
             screen::set_partial("");
             if self.marked {
@@ -102,6 +127,10 @@ fn short(v: &Value, max: usize) -> String {
 }
 
 pub fn tool_call(name: &str, args: &Value) {
+    if jsonio::enabled() {
+        jsonio::emit("tool_call", json!({"name": name, "args": args}));
+        return;
+    }
     let mut parts = Vec::new();
     if let Some(obj) = args.as_object() {
         for (k, v) in obj {
@@ -117,6 +146,10 @@ pub fn tool_call(name: &str, args: &Value) {
 }
 
 pub fn tool_result(text: &str) {
+    if jsonio::enabled() {
+        jsonio::emit("tool_result", json!({"text": text}));
+        return;
+    }
     let lines: Vec<&str> = text.lines().collect();
     for l in lines.iter().take(4) {
         let l = l.trim_end();
@@ -133,6 +166,12 @@ pub fn tool_result(text: &str) {
 }
 
 pub fn diff(path: &str, old: &str, new: &str) {
+    if jsonio::enabled() {
+        // Both sides, unrendered: VS Code shows a real diff editor with them,
+        // which is the whole reason to run the agent inside an editor.
+        jsonio::emit("diff", json!({"path": path, "old": old, "new": new}));
+        return;
+    }
     use similar::{ChangeTag, TextDiff};
     screen::line(&format!("  {} {}", "diff".yellow(), path.yellow()));
     let d = TextDiff::from_lines(old, new);
@@ -157,6 +196,9 @@ pub fn diff(path: &str, old: &str, new: &str) {
 /// pick up the newline left over from submitting the prompt, so the first
 /// answer was always read as "no" — this consumes real key events instead.
 pub fn confirm(question: &str) -> bool {
+    if jsonio::enabled() {
+        return jsonio::confirm(question, json!(null));
+    }
     use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
     use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
     use std::time::Duration;
@@ -200,6 +242,10 @@ pub fn confirm(question: &str) -> bool {
 
 /// One line of live output from a running command.
 pub fn stream_line(text: &str, is_err: bool) {
+    if jsonio::enabled() {
+        jsonio::emit("stream", json!({"text": text, "is_err": is_err}));
+        return;
+    }
     let t = text.trim_end();
     let t: String = if t.chars().count() > 140 {
         format!("{}…", t.chars().take(140).collect::<String>())
@@ -214,22 +260,41 @@ pub fn stream_line(text: &str, is_err: bool) {
 }
 
 pub fn usage(prompt: u32, completion: u32, budget: u32) {
+    if jsonio::enabled() {
+        jsonio::emit("usage", json!({"prompt": prompt, "completion": completion, "budget": budget}));
+        return;
+    }
     screen::line(&format!("{}", format!("  ⋯ {prompt} in / {completion} out (budget {budget})").dimmed()));
 }
 
 pub fn info(msg: &str) {
+    if jsonio::enabled() {
+        jsonio::emit("info", json!({"message": msg}));
+        return;
+    }
     screen::line(&format!("{} {}", "i".blue().bold(), msg));
 }
 
 pub fn warn(msg: &str) {
+    if jsonio::enabled() {
+        jsonio::emit("warn", json!({"message": msg}));
+        return;
+    }
     screen::line(&format!("{} {}", "!".yellow().bold(), msg.yellow()));
 }
 
 pub fn error(msg: &str) {
+    if jsonio::enabled() {
+        jsonio::emit("error", json!({"message": msg}));
+        return;
+    }
     screen::line(&format!("{} {}", "✗".red().bold(), msg.red()));
 }
 
 pub fn help() {
+    if jsonio::enabled() {
+        return;
+    }
     for (cmd, what) in [
         ("/stop  ", "stop the running dev server"),
         ("/logs  ", "show the server's recent output"),
