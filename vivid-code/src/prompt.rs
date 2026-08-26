@@ -3,11 +3,15 @@ use ignore::WalkBuilder;
 use std::path::Path;
 
 const SYSTEM: &str = include_str!("../prompts/system.md");
+/// Appended with --think: the model has no hidden reasoning channel, so the
+/// only way to see its thinking is to ask it to write it down.
+const THINK: &str = include_str!("../prompts/think.md");
 const MAX_ENTRIES: usize = 150;
 const SKIP: &[&str] = &["node_modules", ".git", "target", ".next", "dist", "build", ".venv", "__pycache__", ".expo"];
 
-pub fn build(root: &Path) -> String {
-    SYSTEM
+pub fn build(root: &Path, think: bool) -> String {
+    let base = if think { format!("{SYSTEM}{THINK}") } else { SYSTEM.to_string() };
+    base
         .replace("{{CWD}}", &root.display().to_string())
         .replace("{{OS}}", &format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH))
         .replace("{{DATE}}", &chrono::Local::now().format("%A %d %B %Y").to_string())

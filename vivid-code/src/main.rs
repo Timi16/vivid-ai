@@ -1,4 +1,5 @@
 mod agent;
+mod brief;
 mod browser;
 mod config;
 mod input;
@@ -41,6 +42,19 @@ struct Args {
     /// Max tool steps per turn
     #[arg(long, default_value_t = 60)]
     max_iter: usize,
+    /// Endpoint of the model that writes design briefs before building.
+    /// Also VIVID_DESIGN_URL or design_url in ~/.vivid/config.toml
+    #[arg(long, value_name = "URL")]
+    design_url: Option<String>,
+    /// Build straight from your words, with no design brief step
+    #[arg(long)]
+    no_design: bool,
+    /// Show the model's reasoning as it works (on by default; --no-think hides it)
+    #[arg(long)]
+    think: bool,
+    /// Hide the reasoning and keep replies terse
+    #[arg(long)]
+    no_think: bool,
     /// Open a URL in a headless browser and report JS errors, then exit.
     /// No model involved: `vivid --check http://localhost:3000`
     #[arg(long, value_name = "URL")]
@@ -79,7 +93,14 @@ async fn main() -> Result<()> {
                     }
                 }
                 println!("  webgl: {}", r.stats["webgl"].as_str().unwrap_or("?"));
+                let blank = r.framing.as_ref().map(|f| f.coverage_pct < 0.4).unwrap_or(false);
+                if blank && r.stats["visible_text_chars"].as_u64().unwrap_or(0) < 5 {
+                    println!("  PAGE IS BLANK — nothing drawn, no visible text");
+                }
                 if let Some(f) = &r.framing {
+                    if f.dominance > 0.985 {
+                        println!("  CANVAS EMPTY — {:.1}% one flat colour", f.dominance * 100.0);
+                    }
                     println!("  framing: {:.1}% covered, x {:.0}%–{:.0}%, y {:.0}%–{:.0}%{}",
                              f.coverage_pct, f.left_pct, f.right_pct, f.top_pct, f.bottom_pct,
                              if f.clipped_edges.is_empty() { String::new() }
@@ -102,7 +123,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    let cfg = config::Config::load(args.url.clone(), args.model.clone(), !args.no_stream);
+    let cfg = config::Config::load(args.url.clone(), args.model.clone(), !args.no_stream, args.design_url.clone());
     // Ask the engine what it is serving and how big its window is, so moving to
     // a roomier pod widens the budget without editing anything here.
     let (model, engine_ctx) = match cfg.model.clone() {
@@ -113,8 +134,30 @@ async fn main() -> Result<()> {
     let llm = llm::Client::new(&cfg.url, &model, cfg.stream, cfg.max_reply_tokens)?;
     let pm = Arc::new(Mutex::new(process::ProcessManager::default()));
     let ctx = tools::Ctx { root: root.clone(), pm: pm.clone(), http: reqwest::Client::new() };
-    let system = prompt::build(&root);
+    // Thinking is on unless asked otherwise; --think stays accepted so the
+    // flag reads naturally either way.
+    let think = args.think || !args.no_think;
+    let system = prompt::build(&root, think);
     let mut agent = agent::Agent::new(llm, ctx, system, args.yolo, args.max_iter, cfg.context_budget);
+
+    // The design model is optional: without it, the request goes to the coder
+    // exactly as typed.
+    let mut designer = None;
+    if !args.no_design {
+        if let Some(durl) = cfg.design_url.clone() {
+            match brief::Designer::new(&durl, cfg.design_model.clone()) {
+                Ok(mut d) => {
+                    if d.resolve_model().await.is_ok() {
+                        designer = Some(d);
+                    } else {
+                        ui::warn("design model unreachable; building straight from your words");
+                    }
+                }
+                Err(e) => ui::warn(&format!("design model not configured ({e})")),
+            }
+        }
+    }
+    agent.set_designer(designer);
 
     ui::banner(&root.display().to_string());
     if std::env::var("VIVID_DEBUG").is_ok() {

@@ -55,6 +55,8 @@ pub struct Report {
 /// and no HTTP check or console log will ever say so.
 pub struct Framing {
     pub coverage_pct: f32,
+    /// Share of the frame taken by its single most common colour.
+    pub dominance: f32,
     pub left_pct: f32,
     pub right_pct: f32,
     pub top_pct: f32,
@@ -83,15 +85,26 @@ fn analyse_frame(b64: &str) -> Option<Framing> {
         let i = (y * w + x) * ch;
         (buf[i] as i32, buf[i + 1] as i32, buf[i + 2] as i32)
     };
-    // The corners agree on the background in almost every rendered scene.
-    let bg = {
-        let c = [px(0, 0), px(w - 1, 0), px(0, h - 1), px(w - 1, h - 1)];
-        (
-            c.iter().map(|p| p.0).sum::<i32>() / 4,
-            c.iter().map(|p| p.1).sum::<i32>() / 4,
-            c.iter().map(|p| p.2).sum::<i32>() / 4,
-        )
-    };
+    // Take the most common colour as the background, not the corner average:
+    // a canvas split into two dark tones made every pixel look like content and
+    // reported 100% coverage on a frame that was essentially empty.
+    let step0 = (w.max(h) / 200).max(1);
+    let mut hist: std::collections::HashMap<(i32, i32, i32), u32> = std::collections::HashMap::new();
+    for y in (0..h).step_by(step0) {
+        for x in (0..w).step_by(step0) {
+            let (r, g, b) = px(x, y);
+            *hist.entry((r / 16, g / 16, b / 16)).or_insert(0) += 1;
+        }
+    }
+    let (bg, bg_count) = hist
+        .iter()
+        .max_by_key(|(_, n)| **n)
+        .map(|(k, n)| (((k.0 * 16 + 8), (k.1 * 16 + 8), (k.2 * 16 + 8)), *n))
+        .unwrap_or(((0, 0, 0), 0));
+    let sampled: u32 = hist.values().sum();
+    // If nearly every pixel is that one colour, the frame is flat, full stop.
+    let dominance = if sampled > 0 { bg_count as f32 / sampled as f32 } else { 0.0 };
+
     let step = (w.max(h) / 400).max(1); // sample, do not scan every pixel
     let (mut minx, mut miny, mut maxx, mut maxy) = (w, h, 0usize, 0usize);
     let mut hits = 0usize;
@@ -100,7 +113,10 @@ fn analyse_frame(b64: &str) -> Option<Framing> {
         for x in (0..w).step_by(step) {
             total += 1;
             let (r, g, b) = px(x, y);
-            if (r - bg.0).abs() + (g - bg.1).abs() + (b - bg.2).abs() > 24 {
+            // Sum across channels. Kept low because a dimly-lit 3D scene sits
+            // only a few levels above its background; the histogram background
+            // above is what stops that low threshold firing on everything.
+            if (r - bg.0).abs() + (g - bg.1).abs() + (b - bg.2).abs() > 28 {
                 hits += 1;
                 minx = minx.min(x);
                 maxx = maxx.max(x);
@@ -112,6 +128,7 @@ fn analyse_frame(b64: &str) -> Option<Framing> {
     if hits == 0 {
         return Some(Framing {
             coverage_pct: 0.0,
+            dominance,
             left_pct: 0.0, right_pct: 0.0, top_pct: 0.0, bottom_pct: 0.0,
             clipped_edges: vec![],
         });
@@ -125,6 +142,7 @@ fn analyse_frame(b64: &str) -> Option<Framing> {
     if maxy + m >= h { clipped.push("bottom"); }
     Some(Framing {
         coverage_pct: (hits as f32 / total as f32) * 100.0,
+        dominance,
         left_pct: pct(minx, w),
         right_pct: pct(maxx, w),
         top_pct: pct(miny, h),
@@ -169,6 +187,136 @@ mod tempdir {
 async fn free_port() -> Result<u16> {
     let l = TcpListener::bind("127.0.0.1:0").await?;
     Ok(l.local_addr()?.port())
+}
+
+/// Load a page and run the caller's JavaScript in it, returning what the last
+/// expression evaluates to. This is the only way to exercise behaviour that
+/// lives in the browser — clicking, typing, reading what a display says.
+pub async fn eval(url: &str, script: &str, settle_ms: u64) -> Result<(String, Vec<String>)> {
+    let (mut ws, _guard) = attach(url).await?;
+    let mut id = 0u64;
+    macro_rules! cdp {
+        ($method:expr, $params:expr) => {{
+            id += 1;
+            let msg = json!({"id": id, "method": $method, "params": $params}).to_string();
+            ws.send(tokio_tungstenite::tungstenite::Message::Text(msg)).await?;
+            id
+        }};
+    }
+    cdp!("Runtime.enable", json!({}));
+    cdp!("Page.enable", json!({}));
+    cdp!("Page.navigate", json!({"url": url}));
+
+    let mut errors: Vec<String> = Vec::new();
+    let ready = tokio::time::Instant::now() + Duration::from_millis(settle_ms.max(600) + 4_000);
+    let mut loaded = false;
+    while tokio::time::Instant::now() < ready {
+        let Ok(Some(Ok(msg))) = tokio::time::timeout_at(ready, ws.next()).await else { break };
+        let Ok(v) = serde_json::from_str::<Value>(&msg.to_string()) else { continue };
+        if v["method"] == "Page.loadEventFired" {
+            loaded = true;
+        }
+        if v["method"] == "Runtime.exceptionThrown" {
+            let d = &v["params"]["exceptionDetails"];
+            if let Some(t) = d["exception"]["description"].as_str().or_else(|| d["text"].as_str()) {
+                errors.push(t.lines().next().unwrap_or(t).to_string());
+            }
+        }
+        if loaded {
+            tokio::time::sleep(Duration::from_millis(settle_ms.max(400))).await;
+            break;
+        }
+    }
+
+    // Wrapped in an async IIFE so the caller may use `await` freely.
+    let wrapped = format!(
+        "(async () => {{ try {{ const __r = await (async () => {{ {script} }})(); \
+         return typeof __r === 'string' ? __r : JSON.stringify(__r); }} \
+         catch (e) {{ return 'THREW: ' + (e && e.message ? e.message : String(e)); }} }})()"
+    );
+    let eid = cdp!(
+        "Runtime.evaluate",
+        json!({"expression": wrapped, "awaitPromise": true, "returnByValue": true})
+    );
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(25);
+    while tokio::time::Instant::now() < deadline {
+        let Ok(Some(Ok(msg))) = tokio::time::timeout_at(deadline, ws.next()).await else { break };
+        let Ok(v) = serde_json::from_str::<Value>(&msg.to_string()) else { continue };
+        if v["method"] == "Runtime.exceptionThrown" {
+            let d = &v["params"]["exceptionDetails"];
+            if let Some(t) = d["exception"]["description"].as_str().or_else(|| d["text"].as_str()) {
+                errors.push(t.lines().next().unwrap_or(t).to_string());
+            }
+        }
+        if v["id"].as_u64() == Some(eid) {
+            if let Some(ex) = v["result"]["exceptionDetails"]["text"].as_str() {
+                return Ok((format!("THREW: {ex}"), errors));
+            }
+            let out = v["result"]["result"]["value"]
+                .as_str()
+                .map(String::from)
+                .unwrap_or_else(|| v["result"]["result"]["value"].to_string());
+            return Ok((out, errors));
+        }
+    }
+    Err(anyhow!("the script did not finish within 25s"))
+}
+
+/// Start a browser and attach to its first page target.
+async fn attach(
+    _url: &str,
+) -> Result<(
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    Browser,
+)> {
+    let exe = find_browser().ok_or_else(|| {
+        anyhow!("no Chrome/Chromium found. Install Google Chrome, or set VIVID_BROWSER to a browser binary.")
+    })?;
+    let port = free_port().await?;
+    let dir = tempdir::Dir::new()?;
+    let child = Command::new(&exe)
+        .args([
+            "--headless=new",
+            "--use-gl=angle",
+            "--use-angle=swiftshader",
+            "--enable-unsafe-swiftshader",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-extensions",
+            "--mute-audio",
+            "--window-size=1280,900",
+            &format!("--remote-debugging-port={port}"),
+            &format!("--user-data-dir={}", dir.0.display()),
+            "about:blank",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .with_context(|| format!("could not start {exe}"))?;
+    let guard = Browser { child, _dir: dir };
+
+    let http = reqwest::Client::new();
+    let mut ws_url = None;
+    for _ in 0..60 {
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        if let Ok(r) = http.get(format!("http://127.0.0.1:{port}/json/list")).send().await {
+            if let Ok(v) = r.json::<Value>().await {
+                if let Some(t) = v.as_array().and_then(|a| {
+                    a.iter().find(|t| t["type"] == "page" && t["webSocketDebuggerUrl"].is_string())
+                }) {
+                    ws_url = t["webSocketDebuggerUrl"].as_str().map(String::from);
+                    break;
+                }
+            }
+        }
+    }
+    let ws_url = ws_url.ok_or_else(|| anyhow!("the browser started but never exposed a DevTools endpoint"))?;
+    let (ws, _) = tokio_tungstenite::connect_async(&ws_url)
+        .await
+        .context("could not attach to the browser")?;
+    Ok((ws, guard))
 }
 
 pub async fn inspect(url: &str, settle_ms: u64) -> Result<Report> {
@@ -245,11 +393,32 @@ pub async fn inspect(url: &str, settle_ms: u64) -> Result<Report> {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
     let mut failed = Vec::new();
-    let deadline = tokio::time::Instant::now() + Duration::from_millis(settle_ms.max(800) + 2_500);
+    // Wait for the page to actually finish loading rather than for a fixed
+    // stretch of time: a CDN script that had not arrived yet made a perfectly
+    // good page report itself blank, at random.
+    let hard_deadline = tokio::time::Instant::now() + Duration::from_millis(settle_ms.max(800) + 20_000);
+    let mut inflight: i64 = 0;
+    let mut loaded = false;
+    let mut quiet_since: Option<tokio::time::Instant> = None;
+    let settle = Duration::from_millis(settle_ms.max(700));
 
-    while tokio::time::Instant::now() < deadline {
-        let next = tokio::time::timeout_at(deadline, ws.next()).await;
-        let Ok(Some(Ok(msg))) = next else { break };
+    loop {
+        let now = tokio::time::Instant::now();
+        if now >= hard_deadline {
+            break;
+        }
+        if loaded && inflight <= 0 {
+            match quiet_since {
+                Some(t) if now.duration_since(t) >= settle => break,
+                None => quiet_since = Some(now),
+                _ => {}
+            }
+        } else {
+            quiet_since = None;
+        }
+        let tick = now + Duration::from_millis(150);
+        let Ok(next) = tokio::time::timeout_at(tick.min(hard_deadline), ws.next()).await else { continue };
+        let Some(Ok(msg)) = next else { break };
         let Ok(v) = serde_json::from_str::<Value>(&msg.to_string()) else { continue };
         match v["method"].as_str().unwrap_or("") {
             "Runtime.exceptionThrown" => {
@@ -311,6 +480,9 @@ pub async fn inspect(url: &str, settle_ms: u64) -> Result<Report> {
                     _ => {}
                 }
             }
+            "Page.loadEventFired" => loaded = true,
+            "Network.requestWillBeSent" => inflight += 1,
+            "Network.loadingFinished" => inflight -= 1,
             "Network.responseReceived" => {
                 let status = v["params"]["response"]["status"].as_u64().unwrap_or(200);
                 if status >= 400 {
@@ -319,8 +491,11 @@ pub async fn inspect(url: &str, settle_ms: u64) -> Result<Report> {
                 }
             }
             "Network.loadingFailed" => {
+                inflight -= 1;
                 let u = v["params"]["errorText"].as_str().unwrap_or("request failed");
-                failed.push(u.to_string());
+                if !u.contains("favicon") {
+                    failed.push(u.to_string());
+                }
             }
             _ => {}
         }

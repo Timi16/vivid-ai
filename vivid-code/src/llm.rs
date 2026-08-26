@@ -70,6 +70,43 @@ pub struct Completion {
     pub finish_reason: Option<String>,
 }
 
+/// Transient network failures are common against a hosted pod: a reset
+/// connection or a gateway hiccup should not end a build that is going well.
+const MAX_ATTEMPTS: u32 = 10;
+
+/// Retry only what a retry can actually fix. Reqwest wraps its causes, so this
+/// reads the rendered message rather than matching a dozen concrete types.
+fn retryable(e: &anyhow::Error) -> bool {
+    let s = format!("{e:#}").to_lowercase();
+    [
+        "connection reset",
+        "connection closed",
+        "connection refused",
+        "sendrequest",
+        "broken pipe",
+        "stream read failed",
+        "error sending request",
+        "timed out",
+        "timeout",
+        "dns",
+        "no address",
+        "incomplete message",
+        "502",
+        "503",
+        "504",
+        "429",
+        "not serving yet",
+    ]
+    .iter()
+    .any(|needle| s.contains(needle))
+}
+
+fn backoff(attempt: u32) -> Duration {
+    // 0.5s, 1s, 2s, 4s, then hold at 8s.
+    let ms = 500u64.saturating_mul(1 << (attempt - 1).min(4));
+    Duration::from_millis(ms.min(8_000))
+}
+
 pub struct Client {
     http: reqwest::Client,
     base: String,
@@ -88,6 +125,42 @@ impl Client {
     }
 
     pub async fn chat(
+        &self,
+        messages: &[Message],
+        tools: &[Value],
+        on_token: &mut dyn FnMut(&str),
+    ) -> Result<Completion> {
+        let mut last: Option<anyhow::Error> = None;
+        for attempt in 1..=MAX_ATTEMPTS {
+            let mut streamed = false;
+            let mut watch = |t: &str| {
+                streamed = true;
+                on_token(t);
+            };
+            match self.attempt(messages, tools, &mut watch).await {
+                Ok(c) => return Ok(c),
+                Err(e) => {
+                    if !retryable(&e) || attempt == MAX_ATTEMPTS {
+                        return Err(e);
+                    }
+                    let wait = backoff(attempt);
+                    crate::ui::warn(&format!(
+                        "connection to the engine failed ({}); retrying in {}  [{}/{}]{}",
+                        short_cause(&e),
+                        human(wait),
+                        attempt + 1,
+                        MAX_ATTEMPTS,
+                        if streamed { " — the reply restarts, so some text repeats" } else { "" }
+                    ));
+                    tokio::time::sleep(wait).await;
+                    last = Some(e);
+                }
+            }
+        }
+        Err(last.unwrap_or_else(|| anyhow!("the engine could not be reached")))
+    }
+
+    async fn attempt(
         &self,
         messages: &[Message],
         tools: &[Value],
@@ -224,6 +297,18 @@ impl Client {
         };
         Ok(Completion { message, usage, finish_reason })
     }
+}
+
+fn human(d: Duration) -> String {
+    let ms = d.as_millis();
+    if ms < 1_000 { format!("{ms}ms") } else { format!("{:.0}s", d.as_secs_f32()) }
+}
+
+/// The deepest cause in the chain — that is the one that says what went wrong.
+fn short_cause(e: &anyhow::Error) -> String {
+    let full = format!("{e:#}");
+    let deepest = full.split(": ").last().unwrap_or(&full).trim();
+    deepest.chars().take(80).collect()
 }
 
 /// Tool-call ids must be exactly 9 alphanumeric characters.

@@ -138,6 +138,15 @@ pub fn edit_file(ctx: &Ctx, args: &Value) -> Result<String> {
     let rel = arg_str(args, "path").ok_or_else(|| anyhow!("path is required"))?;
     let old = arg_str(args, "old_string").ok_or_else(|| anyhow!("old_string is required"))?;
     let new = arg_str(args, "new_string").ok_or_else(|| anyhow!("new_string is required"))?;
+    // A "replacement" identical to the original changes nothing, yet used to
+    // report success — the model then re-checked, saw the same error, and made
+    // the same no-op edit forever.
+    if old == new {
+        return Err(anyhow!(
+            "old_string and new_string are identical, so this edit would change nothing. \
+             Work out what the code should actually say and send a different new_string."
+        ));
+    }
     let path = resolve(&ctx.root, rel)?;
     let text = std::fs::read_to_string(&path).with_context(|| format!("could not read `{rel}`"))?;
     let count = text.matches(old).count();
@@ -148,6 +157,12 @@ pub fn edit_file(ctx: &Ctx, args: &Value) -> Result<String> {
         return Err(anyhow!("old_string appears {count} times in {rel}; include more surrounding lines so it is unique."));
     }
     let updated = text.replacen(old, new, 1);
+    if updated == text {
+        return Err(anyhow!(
+            "that edit left {rel} byte-for-byte unchanged. Something else is wrong — re-read the \
+             file and address the real cause instead of repeating this edit."
+        ));
+    }
     ui::diff(rel, old, new);
     std::fs::write(&path, &updated)?;
     Ok(format!("Edited {rel} ({} lines now)", updated.lines().count()))

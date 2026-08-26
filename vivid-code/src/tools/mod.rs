@@ -16,6 +16,28 @@ pub struct Ctx {
     pub http: reqwest::Client,
 }
 
+/// Tools that change something. After one of these runs, re-running a check
+/// is not a repeat — the thing being checked is different now.
+///
+/// `bash` is deliberately NOT unconditionally in here. Treating every shell
+/// command as a change reset the loop detector on every call, which made the
+/// most loop-prone tool the one least protected: the same `curl | grep` ran
+/// six times in a row without ever tripping it.
+pub fn mutates(name: &str, args: &Value) -> bool {
+    match name {
+        "write_file" | "edit_file" | "serve_static" | "start_server" | "stop_server" => true,
+        "bash" => {
+            let cmd = arg_str(args, "command").unwrap_or("").trim().to_lowercase();
+            let read_only = regex::Regex::new(
+                r"^(curl|wget|ls|cat|head|tail|grep|rg|wc|find|echo|pwd|stat|file|which|type|du|df|env|printenv|date|whoami|ps|open|node\s+-c|git\s+(status|log|diff|show|branch))(\s|$)",
+            )
+            .unwrap();
+            !read_only.is_match(&cmd)
+        }
+        _ => false,
+    }
+}
+
 /// Tools that print their own output line by line while running.
 pub fn streams_output(name: &str) -> bool {
     name == "bash"
@@ -94,6 +116,12 @@ pub fn schemas() -> Vec<Value> {
           json!({"path": {"type": "string", "description": "Path on the running server, default '/'"},
                  "wait_ms": {"type": "integer", "description": "Extra settle time for animation or fetches, default 1200"}}),
           &[]),
+        t("page_eval",
+          "Run JavaScript inside a page loaded in a real browser and return what it evaluates to. This is how you TEST behaviour you cannot test from the terminal: click buttons, type keys, read the display, check state. The script's final expression is the result — return a string or a JSON-stringified object. Example for a calculator: click the button elements in order and return the display's text.",
+          json!({"path": {"type": "string", "description": "Path on the running server, default '/'"},
+                 "script": {"type": "string", "description": "JavaScript to run in the page. The last expression is returned. You may use await."},
+                 "wait_ms": {"type": "integer", "description": "Settle time before running, default 800"}}),
+          &["script"]),
         t("stop_server", "Stop the running dev server.", json!({}), &[]),
     ]
 }
@@ -111,6 +139,7 @@ pub async fn run(name: &str, args: &Value, ctx: &Ctx) -> Result<String> {
         "server_logs" => server::server_logs(ctx, args).await,
         "http_request" => server::http_request(ctx, args).await,
         "check_page" => server::check_page(ctx, args).await,
+        "page_eval" => server::page_eval(ctx, args).await,
         "stop_server" => server::stop_server(ctx).await,
         other => Err(anyhow!("unknown tool `{other}`")),
     }

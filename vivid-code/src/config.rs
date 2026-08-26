@@ -5,6 +5,8 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 
 pub const DEFAULT_URL: &str = "https://8bkjp6ojhgy5u1-8000.proxy.runpod.net/v1";
+/// The chat pod writes the design briefs; it has better taste than the coder.
+pub const DEFAULT_DESIGN_URL: &str = "https://bff4kyzmm1kn35-8000.proxy.runpod.net/v1";
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -15,6 +17,9 @@ pub struct Config {
     pub context_budget: u32,
     /// True when the user pinned context_budget themselves.
     pub context_budget_explicit: bool,
+    /// Endpoint of the model that writes design briefs (the chat pod).
+    pub design_url: Option<String>,
+    pub design_model: Option<String>,
     /// Ceiling on one reply. A whole HTML page inside a single write_file call
     /// is easily 5k tokens; too low a cap truncates the JSON mid-argument.
     pub max_reply_tokens: u32,
@@ -26,10 +31,12 @@ struct FileConfig {
     model: Option<String>,
     context_budget: Option<u32>,
     max_reply_tokens: Option<u32>,
+    design_url: Option<String>,
+    design_model: Option<String>,
 }
 
 impl Config {
-    pub fn load(url_flag: Option<String>, model_flag: Option<String>, stream: bool) -> Self {
+    pub fn load(url_flag: Option<String>, model_flag: Option<String>, stream: bool, design_flag: Option<String>) -> Self {
         let file = dirs::home_dir()
             .map(|h| h.join(".vivid").join("config.toml"))
             .and_then(|p| std::fs::read_to_string(p).ok())
@@ -51,7 +58,12 @@ impl Config {
             stream,
             context_budget: file.context_budget.unwrap_or(24_000),
             context_budget_explicit: file.context_budget.is_some(),
-            max_reply_tokens: file.max_reply_tokens.unwrap_or(12_000),
+            max_reply_tokens: file.max_reply_tokens.unwrap_or(16_000),
+            design_url: design_flag
+                .or_else(|| std::env::var("VIVID_DESIGN_URL").ok())
+                .or(file.design_url)
+                .or_else(|| Some(DEFAULT_DESIGN_URL.to_string())),
+            design_model: std::env::var("VIVID_DESIGN_MODEL").ok().or(file.design_model),
         }
     }
 }
@@ -72,7 +84,31 @@ impl Config {
 }
 
 /// Ask the endpoint which model it is serving, and how much context it has.
+/// Retries: a pod that is still booting answers with a holding page or nothing
+/// at all, and that should mean "wait", not "give up before we started".
 pub async fn discover(base: &str) -> Result<(String, Option<u32>)> {
+    let mut last: Option<anyhow::Error> = None;
+    for attempt in 1..=6u32 {
+        match discover_once(base).await {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                if attempt < 6 {
+                    let wait = std::time::Duration::from_millis(500u64 << (attempt - 1).min(4));
+                    crate::ui::warn(&format!(
+                        "engine not ready yet; waiting {:.1}s  [{}/6]",
+                        wait.as_secs_f32(),
+                        attempt + 1
+                    ));
+                    tokio::time::sleep(wait).await;
+                }
+                last = Some(e);
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| anyhow!("the engine could not be reached")))
+}
+
+async fn discover_once(base: &str) -> Result<(String, Option<u32>)> {
     let http = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(20))
         .timeout(std::time::Duration::from_secs(30))

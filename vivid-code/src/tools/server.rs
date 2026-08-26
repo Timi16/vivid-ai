@@ -43,6 +43,39 @@ pub async fn stop_server(ctx: &Ctx) -> Result<String> {
     Ok(out)
 }
 
+/// How many times framing has been flagged this session. The measurement is a
+/// heuristic; repeating it turned the model into a camera-tweaking loop that
+/// never converged, so the nag is said once and then withdrawn.
+static FRAMING_WARNINGS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub async fn page_eval(ctx: &Ctx, args: &Value) -> Result<String> {
+    let script = arg_str(args, "script").ok_or_else(|| anyhow!("script is required"))?;
+    let path = arg_str(args, "path").unwrap_or("/");
+    let wait = arg_u64(args, "wait_ms").unwrap_or(800).clamp(0, 10_000);
+    let port = {
+        let mut pm = ctx.pm.lock().await;
+        if !pm.is_running() {
+            return Err(anyhow!("no server is running — start one first"));
+        }
+        pm.port.unwrap_or(3000)
+    };
+    let p = if path.starts_with('/') { path.to_string() } else { format!("/{path}") };
+    let url = format!("http://127.0.0.1:{port}{p}");
+
+    let (value, errors) = crate::browser::eval(&url, script, wait).await?;
+    let mut out = format!("ran in {url}\nresult: {}\n", truncate(&value, 4_000));
+    if !errors.is_empty() {
+        out.push_str(&format!("javascript errors while running ({}):\n", errors.len()));
+        for e in errors.iter().take(6) {
+            out.push_str(&format!("  - {}\n", e.chars().take(200).collect::<String>()));
+        }
+    }
+    if value.starts_with("THREW:") {
+        out.push_str("The script itself threw. Check the selectors and the API you assumed exist.\n");
+    }
+    Ok(out)
+}
+
 pub async fn check_page(ctx: &Ctx, args: &Value) -> Result<String> {
     let path = arg_str(args, "path").unwrap_or("/");
     let wait = arg_u64(args, "wait_ms").unwrap_or(1200).clamp(0, 15_000);
@@ -103,8 +136,45 @@ pub async fn check_page(ctx: &Ctx, args: &Value) -> Result<String> {
             }
         }
     }
+    // A page with no drawn pixels and no words on it is broken, whatever the
+    // console says. Without this, "javascript errors: none" reads as success on
+    // a completely empty page.
+    let text_chars = st["visible_text_chars"].as_u64().unwrap_or(0);
+    let no_canvas = st["canvases"].as_array().map(|a| a.is_empty()).unwrap_or(true);
+    // A frame that compresses to almost nothing is flat, whatever the pixel
+    // sampler says — the two signals disagree on low-contrast scenes.
+    let flat_bytes = r.shot_bytes.map(|b| b < 3_000).unwrap_or(false);
+    let blank = flat_bytes || r.framing.as_ref().map(|f| f.coverage_pct < 0.4).unwrap_or(false);
+    if blank && text_chars < 5 {
+        out.push_str(
+            "THE PAGE IS BLANK. Nothing was drawn and there is no visible text, even though no \
+             JavaScript error was thrown.\n",
+        );
+        if no_canvas {
+            out.push_str(
+                "  There is no <canvas> in the document at all. A WebGLRenderer creates one but does \
+                 NOT attach it: you must append `renderer.domElement` to the page \
+                 (`document.body.appendChild(renderer.domElement)`), or construct the renderer against \
+                 a canvas that is already in the HTML.\n",
+            );
+        } else {
+            out.push_str(
+                "  A canvas exists but nothing reached it. Check that the render loop actually runs, \
+                 that objects were added to the scene, and that the camera is looking at them.\n",
+            );
+        }
+    }
     if let (Some(f), true) = (&r.framing, r.shot_is_canvas) {
-        if f.coverage_pct < 0.4 {
+        if f.dominance > 0.985 {
+            out.push_str(&format!(
+                "THE CANVAS IS EMPTY: {:.1}% of it is a single flat colour, so nothing is being \
+                 drawn into it even though no error was thrown. Usual causes: the render loop never \
+                 starts (call it once directly, not only from an event handler), the scene has no \
+                 light so every material renders black, or the camera is not pointing at the \
+                 objects. Fix the cause and check again.\n",
+                f.dominance * 100.0
+            ));
+        } else if f.coverage_pct < 0.4 {
             out.push_str(&format!(
                 "FRAMING: only {:.1}% of the canvas has anything drawn on it — the scene is \
                  effectively empty. Check the camera is pointing at your objects and that they are \
@@ -117,19 +187,45 @@ pub async fn check_page(ctx: &Ctx, args: &Value) -> Result<String> {
                  and {:.0}%–{:.0}% down\n",
                 f.coverage_pct, f.left_pct, f.right_pct, f.top_pct, f.bottom_pct
             ));
-            if !f.clipped_edges.is_empty() {
-                out.push_str(&format!(
-                    "FRAMING PROBLEM: the scene runs off the {} edge{}. Move the camera back \
-                     (increase its distance or fov) or reposition the subject so the whole thing fits \
-                     with a margin.\n",
-                    f.clipped_edges.join(" and "),
-                    if f.clipped_edges.len() > 1 { "s" } else { "" }
-                ));
-            }
-            if f.coverage_pct < 6.0 && f.clipped_edges.is_empty() {
+            // Only flag framing when it is unambiguous. This measurement is a
+            // heuristic on pixels, and a borderline reading previously sent the
+            // model into a loop of camera tweaks that never converged — a false
+            // alarm here costs more than a missed one.
+            let bad_edges = f.clipped_edges.len() >= 3;
+            let too_small = f.coverage_pct < 2.0;
+            let warned = FRAMING_WARNINGS.load(std::sync::atomic::Ordering::Relaxed);
+            if (bad_edges || too_small) && warned >= 2 {
                 out.push_str(
-                    "FRAMING PROBLEM: the subject is tiny in a mostly empty frame. Move the camera \
-                     closer or scale the scene up so it fills the view.\n",
+                    "framing still reads low, but you have already adjusted the camera twice. This \
+                     measurement is approximate and may simply be wrong about a dark or sparse scene. \
+                     STOP changing the camera. Finish the task and say in your summary that the \
+                     framing could not be confirmed from the terminal.\n",
+                );
+            } else if bad_edges || too_small {
+                FRAMING_WARNINGS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if bad_edges {
+                    out.push_str(&format!(
+                        "FRAMING: the scene appears to run off the {} edges.\n",
+                        f.clipped_edges.join(", ")
+                    ));
+                } else {
+                    out.push_str("FRAMING: the subject looks tiny in a mostly empty frame.\n");
+                }
+                out.push_str(
+                    "  Do not nudge the camera by hand and re-check — derive the distance from the \
+                     scene's own size, once:\n\
+                    \x20   const box = new THREE.Box3().setFromObject(root);\n\
+                    \x20   const size = box.getSize(new THREE.Vector3());\n\
+                    \x20   const center = box.getCenter(new THREE.Vector3());\n\
+                    \x20   const fit = Math.max(size.x, size.y, size.z);\n\
+                    \x20   const dist = (fit / 2) / Math.tan((camera.fov * Math.PI / 180) / 2) * 1.6;\n\
+                    \x20   camera.position.set(center.x, center.y, center.z + dist);\n\
+                    \x20   camera.lookAt(center);\n\
+                    \x20   camera.near = dist / 100; camera.far = dist * 10; camera.updateProjectionMatrix();\n\
+                      where `root` is the object (or Group) holding the whole apparatus. The 1.6 is \
+                     the margin. Apply this ONCE. Do not keep nudging the camera and re-checking: \
+                     this measurement is approximate, and if it still reads oddly after one proper \
+                     fix, say so in your report and move on.\n",
                 );
             }
         }
