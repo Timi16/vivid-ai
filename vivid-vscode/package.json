@@ -1,0 +1,76 @@
+{
+  "name": "vivid-code-vscode",
+  "displayName": "Vivid Code",
+  "description": "Vivid Code's agent, in your editor. Drives the local `vivid` binary.",
+  "version": "0.1.0",
+  "publisher": "vivid",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["AI"],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{ "id": "vivid", "title": "Vivid Code", "icon": "media/icon.svg" }]
+    },
+    "views": {
+      "vivid": [{ "id": "vivid.agent", "name": "Agent", "type": "webview" }]
+    },
+    "commands": [
+      { "command": "vivid.focus", "title": "Vivid: Focus the agent", "category": "Vivid" },
+      { "command": "vivid.cancel", "title": "Vivid: Cancel the current turn", "category": "Vivid" },
+      { "command": "vivid.restart", "title": "Vivid: Restart the engine", "category": "Vivid" },
+      { "command": "vivid.askAboutSelection", "title": "Vivid: Ask about the selection", "category": "Vivid" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "vivid.askAboutSelection", "when": "editorHasSelection", "group": "vivid" }
+      ]
+    },
+    "keybindings": [
+      { "command": "vivid.focus", "key": "ctrl+shift+i", "mac": "cmd+shift+i" }
+    ],
+    "configuration": {
+      "title": "Vivid Code",
+      "properties": {
+        "vivid.binaryPath": {
+          "type": "string",
+          "default": "vivid",
+          "description": "Path to the `vivid` binary. Left as `vivid`, the sibling ../vivid-code/target/release/vivid is used when it exists, otherwise PATH."
+        },
+        "vivid.engineUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Engine endpoint (…/v1). Empty uses the binary's own default or ~/.vivid/config.toml."
+        },
+        "vivid.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model id. Empty lets the binary discover it from the endpoint."
+        },
+        "vivid.noDesign": {
+          "type": "boolean",
+          "default": false,
+          "description": "Skip the design-brief step and build straight from your words."
+        },
+        "vivid.maxIterations": {
+          "type": "number",
+          "default": 60,
+          "description": "Maximum tool steps per turn."
+        },
+        "vivid.autoApprove": {
+          "type": "boolean",
+          "default": false,
+          "description": "Approve shell commands without asking. Off by default: the agent chooses the command line."
+        }
+      }
+    }
+  },
+  "scripts": { "compile": "tsc -p .", "watch": "tsc -watch -p ." },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.6.0"
+  }
+}

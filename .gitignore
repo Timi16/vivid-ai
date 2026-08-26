@@ -16,4 +16,8 @@ dist/
 
 # OS / editor
 .DS_Store
-.vscode/
+# Anchored to the repo root: this is meant to ignore your own editor
+# settings here, not the .vscode/ directories that subprojects track on
+# purpose (vivid-editor ships ~40 of them, vivid-vscode has its launch
+# configs). Unanchored, it silently dropped all of them from commits.
+/.vscode/
