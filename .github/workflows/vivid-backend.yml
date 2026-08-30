@@ -1,0 +1,268 @@
+# # Test -> build images -> deploy to the EC2 instance.
+# #
+# # A push to main that touches the backend (or the two services it cannot boot
+# # without) runs the suite, builds images, pushes them to GHCR, and rolls them
+# # out over SSH. The instance pulls images; it never builds, so a deploy is a
+# # pull and a restart rather than a compile on a box that also serves traffic.
+# #
+# # Manual runs: workflow_dispatch with an image_tag redeploys an existing tag
+# # without rebuilding, which is the rollback path (tags are commit SHAs).
+# name: vivid-backend
+
+# on:
+#   push:
+#     branches: [main]
+#     paths:
+#       - "vivid-backend/**"
+#       - "sandbox/**"
+#       - "vivid-tools/**"
+#       - "sdk/python/**"
+#       - "deploy/**"
+#       - ".github/workflows/vivid-backend.yml"
+#   pull_request:
+#     branches: [main]
+#     paths:
+#       - "vivid-backend/**"
+#       - "sandbox/**"
+#       - "vivid-tools/**"
+#       - "sdk/python/**"
+#       - "deploy/**"
+#       - ".github/workflows/vivid-backend.yml"
+#   workflow_dispatch:
+#     inputs:
+#       image_tag:
+#         description: "Existing image tag to redeploy (commit SHA). Empty = build and deploy this branch."
+#         required: false
+#         default: ""
+
+# concurrency:
+#   # PR pushes supersede each other; production rollouts queue instead, so two
+#   # deploys never race for the same instance.
+#   group: vivid-backend-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+#   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# env:
+#   PYTHON_VERSION: "3.12"
+
+# jobs:
+#   test:
+#     name: Tests
+#     if: ${{ github.event.inputs.image_tag == '' }}
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - uses: actions/setup-python@v5
+#         with:
+#           python-version: ${{ env.PYTHON_VERSION }}
+#           cache: pip
+#           cache-dependency-path: |
+#             vivid-backend/requirements.txt
+#             vivid-backend/requirements-dev.txt
+
+#       - name: Install dependencies
+#         # The SDK goes in editable from the repo: tests/test_sdk_contract.py
+#         # drives the real routes through it and skips itself when it is absent,
+#         # which would hide a server/SDK disagreement behind a green suite.
+#         run: |
+#           python -m pip install --upgrade pip
+#           pip install -r vivid-backend/requirements.txt \
+#                       -r vivid-backend/requirements-dev.txt \
+#                       -e sdk/python
+
+#       - name: Run tests
+#         working-directory: vivid-backend
+#         run: python -m pytest -q
+
+#   images:
+#     name: Build ${{ matrix.name }}
+#     if: ${{ github.event.inputs.image_tag == '' }}
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read
+#       packages: write
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         include:
+#           - name: vivid-backend
+#             context: ./vivid-backend
+#           # The backend will not start without these two: compose gates it on a
+#           # healthy sandbox, and the browse tools call vivid-tools. Building
+#           # them here keeps the instance free of build tooling.
+#           - name: vivid-sandbox
+#             context: ./sandbox
+#           - name: vivid-tools
+#             context: ./vivid-tools
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - uses: docker/setup-buildx-action@v3
+
+#       - name: Derive tags and labels
+#         id: meta
+#         # Also lowercases the image ref, which GHCR requires and this owner
+#         # name does not satisfy. The `main` tag is attached only on the default
+#         # branch, so a workflow_dispatch off a feature branch cannot move it.
+#         uses: docker/metadata-action@v5
+#         with:
+#           images: ghcr.io/${{ github.repository }}/${{ matrix.name }}
+#           tags: |
+#             type=sha,format=long,prefix=
+#             type=raw,value=main,enable={{is_default_branch}}
+
+#       - name: Log in to GHCR
+#         if: ${{ github.event_name != 'pull_request' }}
+#         uses: docker/login-action@v3
+#         with:
+#           registry: ghcr.io
+#           username: ${{ github.actor }}
+#           password: ${{ secrets.GITHUB_TOKEN }}
+
+#       - name: Build and push
+#         uses: docker/build-push-action@v6
+#         with:
+#           context: ${{ matrix.context }}
+#           # Pull requests build to prove the Dockerfile still works, and stop
+#           # there: nothing from an unmerged branch reaches the registry.
+#           push: ${{ github.event_name != 'pull_request' }}
+#           tags: ${{ steps.meta.outputs.tags }}
+#           # OCI labels record the commit and repo, so `docker inspect` on the
+#           # instance answers "which source built this" without the tag.
+#           labels: ${{ steps.meta.outputs.labels }}
+#           cache-from: type=gha,scope=${{ matrix.name }}
+#           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+#           provenance: false
+
+#   deploy:
+#     name: Deploy to EC2
+#     needs: [test, images]
+#     # Runs after a green build on main, or on a manual dispatch (where test and
+#     # images are skipped when an image_tag is given, hence the result checks
+#     # rather than a plain needs gate).
+#     if: >-
+#       ${{ !cancelled()
+#           && needs.test.result != 'failure' && needs.images.result != 'failure'
+#           && (github.event_name == 'workflow_dispatch'
+#               || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
+#     runs-on: ubuntu-latest
+#     environment: production
+#     permissions:
+#       contents: read
+#       packages: read
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - name: Resolve the tag being deployed
+#         id: target
+#         env:
+#           # Through the environment, never interpolated into the script body:
+#           # a dispatch input is attacker-controlled text as far as the shell is
+#           # concerned, and ${{ }} would paste it in before bash ever sees it.
+#           INPUT_TAG: ${{ github.event.inputs.image_tag }}
+#         run: |
+#           set -euo pipefail
+#           TAG="${INPUT_TAG:-}"
+#           [ -n "$TAG" ] || TAG="$GITHUB_SHA"
+#           case "$TAG" in
+#             *[!a-zA-Z0-9._-]*)
+#               echo "::error::image_tag may only contain letters, digits, dot, underscore and dash"
+#               exit 1 ;;
+#           esac
+#           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+#           echo "Deploying tag $TAG"
+
+#       - name: Configure SSH
+#         env:
+#           SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+#           HOST: ${{ secrets.EC2_HOST }}
+#           SSH_USER: ${{ secrets.EC2_USER }}
+#           PORT: ${{ secrets.EC2_SSH_PORT }}
+#           KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+#         run: |
+#           set -euo pipefail
+#           # A clear message beats an SSH failure that reads like a network fault.
+#           missing=""
+#           [ -n "$HOST" ] || missing="$missing EC2_HOST"
+#           [ -n "$SSH_USER" ] || missing="$missing EC2_USER"
+#           [ -n "$SSH_KEY" ] || missing="$missing EC2_SSH_KEY"
+#           if [ -n "$missing" ]; then
+#             echo "::error::Missing required secrets:$missing (see deploy/README.md)"
+#             exit 1
+#           fi
+#           mkdir -p ~/.ssh && chmod 700 ~/.ssh
+#           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+#           chmod 600 ~/.ssh/deploy_key
+#           if [ -n "$KNOWN_HOSTS" ]; then
+#             printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+#           else
+#             # Trust on first use. Set EC2_KNOWN_HOSTS (ssh-keyscan output, kept
+#             # in a secret) to pin the host key and close the MITM window.
+#             echo "::warning::EC2_KNOWN_HOSTS is not set; falling back to ssh-keyscan"
+#             ssh-keyscan -p "${PORT:-22}" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+#           fi
+#           if [ ! -s ~/.ssh/known_hosts ]; then
+#             echo "::error::No host key for $HOST. Is the instance up and port ${PORT:-22} reachable?"
+#             exit 1
+#           fi
+#           chmod 600 ~/.ssh/known_hosts
+#           cat > ~/.ssh/config <<EOF
+#           Host vivid
+#             HostName $HOST
+#             User $SSH_USER
+#             Port ${PORT:-22}
+#             IdentityFile ~/.ssh/deploy_key
+#             IdentitiesOnly yes
+#             StrictHostKeyChecking yes
+#             ServerAliveInterval 20
+#           EOF
+#           chmod 600 ~/.ssh/config
+
+#       - name: Ship the compose file and deploy script
+#         run: |
+#           set -euo pipefail
+#           ssh vivid 'mkdir -p /opt/vivid'
+#           scp deploy/docker-compose.prod.yml deploy/deploy.sh deploy/Caddyfile vivid:/opt/vivid/
+#           ssh vivid 'chmod +x /opt/vivid/deploy.sh'
+
+#       - name: Authenticate the instance to GHCR
+#         env:
+#           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#           ACTOR: ${{ github.actor }}
+#         # Piped over stdin so the token never lands in a command line or a
+#         # shell history on the instance. It expires with this job, which is why
+#         # the compose file sets restart: unless-stopped: a reboot restarts the
+#         # existing containers rather than needing a fresh pull.
+#         run: |
+#           set -euo pipefail
+#           # shellcheck disable=SC2029  # $ACTOR is meant to expand here, not on
+#           # the instance. It is a GitHub username, so the charset is safe, and
+#           # it is single-quoted in the remote command.
+#           printf '%s\n' "$GHCR_TOKEN" | \
+#             ssh vivid "docker login ghcr.io -u '$ACTOR' --password-stdin"
+
+#       - name: Roll out
+#         env:
+#           IMAGE_REPO_INPUT: ghcr.io/${{ github.repository }}
+#           TAG: ${{ steps.target.outputs.tag }}
+#         run: |
+#           set -euo pipefail
+#           REPO="${IMAGE_REPO_INPUT,,}"
+#           # shellcheck disable=SC2029  # Both are meant to expand here. $REPO
+#           # comes from github.repository and $TAG passed the charset check in
+#           # the "Resolve the tag" step, so neither can carry shell syntax to
+#           # the far side.
+#           ssh vivid "IMAGE_REPO='$REPO' /opt/vivid/deploy.sh '$TAG'"
+
+#       - name: Report what is running
+#         if: always()
+#         env:
+#           TAG: ${{ steps.target.outputs.tag }}
+#           RESULT: ${{ job.status }}
+#         run: |
+#           ssh vivid 'cd /opt/vivid && docker compose -f docker-compose.prod.yml ps' || true
+#           {
+#             echo "### vivid-backend deploy"
+#             echo "- tag: \`${TAG:-unresolved}\`"
+#             echo "- result: $RESULT"
+#           } >> "$GITHUB_STEP_SUMMARY"

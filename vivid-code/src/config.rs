@@ -4,7 +4,7 @@
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 
-pub const DEFAULT_URL: &str = "https://8bkjp6ojhgy5u1-8000.proxy.runpod.net/v1";
+pub const DEFAULT_URL: &str = "https://hvexdqvqqnotd4-8000.proxy.runpod.net/v1";
 /// The chat pod writes the design briefs; it has better taste than the coder.
 pub const DEFAULT_DESIGN_URL: &str = "https://bff4kyzmm1kn35-8000.proxy.runpod.net/v1";
 

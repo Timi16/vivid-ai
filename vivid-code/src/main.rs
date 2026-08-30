@@ -3,6 +3,7 @@ mod brief;
 mod browser;
 mod config;
 mod input;
+mod jsonio;
 mod llm;
 mod markdown;
 mod process;
@@ -55,6 +56,10 @@ struct Args {
     /// Hide the reasoning and keep replies terse
     #[arg(long)]
     no_think: bool,
+    /// Speak NDJSON on stdout and take requests on stdin instead of drawing a
+    /// TUI. This is how the editor extension drives Vivid Code.
+    #[arg(long)]
+    json: bool,
     /// Open a URL in a headless browser and report JS errors, then exit.
     /// No model involved: `vivid --check http://localhost:3000`
     #[arg(long, value_name = "URL")]
@@ -64,6 +69,9 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    if args.json {
+        jsonio::enable();
+    }
     let root = args.dir.clone().unwrap_or(std::env::current_dir()?);
     std::fs::create_dir_all(&root)?;
     let root = root.canonicalize()?;
@@ -128,7 +136,24 @@ async fn main() -> Result<()> {
     // a roomier pod widens the budget without editing anything here.
     let (model, engine_ctx) = match cfg.model.clone() {
         Some(m) => (m, None),
-        None => config::discover(&cfg.url).await?,
+        None => match config::discover(&cfg.url).await {
+            Ok(v) => v,
+            Err(e) => {
+                // In JSON mode a bare `?` exits with a stderr line the editor
+                // never shows anyone. Say what went wrong on the protocol.
+                if args.json {
+                    jsonio::emit(
+                        "error",
+                        serde_json::json!({
+                            "code": "engine_unreachable",
+                            "message": format!("{e:#}"),
+                            "url": cfg.url,
+                        }),
+                    );
+                }
+                return Err(e);
+            }
+        },
     };
     let cfg = cfg.with_engine_context(engine_ctx);
     let llm = llm::Client::new(&cfg.url, &model, cfg.stream, cfg.max_reply_tokens)?;
@@ -167,7 +192,22 @@ async fn main() -> Result<()> {
     // `vivid code` is the product's name, not a task — treat it as "no prompt".
     let prompt = args.prompt.filter(|p| !p.trim().eq_ignore_ascii_case("code"));
 
-    if let Some(p) = prompt {
+    if args.json {
+        // Headless: one turn per prompt frame, until the editor disconnects.
+        // A failing turn is reported and the session stays up — the user will
+        // usually just ask again, and losing the conversation would throw away
+        // every file the model has already read.
+        if let Some(p) = prompt {
+            run_json_turn(&mut agent, &p).await;
+        }
+        while let Some(line) = jsonio::next_prompt() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            jsonio::clear_cancel();
+            run_json_turn(&mut agent, &line).await;
+        }
+    } else if let Some(p) = prompt {
         agent.run_turn(&p).await?;
     } else {
         screen::set_interactive(true);
@@ -208,4 +248,18 @@ async fn main() -> Result<()> {
         ui::info(&msg);
     }
     Ok(())
+}
+
+/// One turn in JSON mode, bracketed by a turn_end the editor waits on.
+async fn run_json_turn(agent: &mut agent::Agent, prompt: &str) {
+    match agent.run_turn(prompt).await {
+        Ok(()) => jsonio::emit("turn_end", serde_json::json!({"ok": true})),
+        Err(e) => {
+            jsonio::emit(
+                "error",
+                serde_json::json!({"code": "turn_failed", "message": format!("{e:#}")}),
+            );
+            jsonio::emit("turn_end", serde_json::json!({"ok": false}));
+        }
+    }
 }

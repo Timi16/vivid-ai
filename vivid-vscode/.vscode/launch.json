@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Vivid Code extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "preLaunchTask": "npm: compile"
+    },
+    {
+      "name": "Run on the demo workspace",
+      "type": "extensionHost",
+      "request": "launch",
+      // Opens a scratch folder instead of asking you to pick one, so the
+      // agent has something to edit the moment the window appears.
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}", "/tmp/vivid-demo"],
+      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "preLaunchTask": "npm: compile"
+    }
+  ]
+}

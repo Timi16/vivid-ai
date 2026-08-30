@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.db.session import init_db
 from app.services import storage
 from app.services.models_gateway import http as gateway_http
+from app.ws.code import router as code_ws_router
 from app.ws.handler import router as ws_router
 
 log = logging.getLogger("vivid")
@@ -58,3 +59,6 @@ app.add_middleware(
 # under the same scheme.
 app.include_router(api_router, prefix="/v1")
 app.include_router(ws_router)
+# The coding agent's own socket (/ws/code): native tool calling, tools run in
+# the editor. Separate from /ws, which is the chat assistant.
+app.include_router(code_ws_router)

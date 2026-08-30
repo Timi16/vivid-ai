@@ -1,4 +1,5 @@
 //! The loop: ask the model, run what it asks for, feed the results back, repeat.
+use crate::jsonio;
 use crate::llm::{Client, Message};
 use crate::tools::{self, Ctx};
 use crate::ui;
@@ -117,6 +118,13 @@ impl Agent {
         let mut refusals = 0usize;
 
         for _ in 0..self.max_iter {
+            // Cooperative cancel from the editor. Checked at the step boundary
+            // so the conversation is always left in a shape the engine will
+            // accept — every tool_call already answered by its tool message.
+            if jsonio::cancelled() {
+                ui::info("cancelled");
+                return Ok(());
+            }
             ui::busy("thinking");
             let mut reply = ui::Reply::new();
             let completion = self
