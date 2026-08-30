@@ -131,5 +131,10 @@ there on reload.
   and the top page is read when its snippet is thin. Measure a change with
   `make search-eval f=transcripts.txt` (one transcript or `tool web_search(…)`
   log line per file line).
+- Deployment is `deploy/` plus `.github/workflows/vivid-backend.yml`: a push to
+  `main` runs the suite, builds the backend, sandbox and vivid-tools images,
+  pushes them to GHCR and rolls them out on the EC2 instance, rolling back if
+  `/v1/health` does not answer. `deploy/README.md` has the instance setup and
+  the list of GitHub secrets.
 - Every table carries `client_id` (default `vivid_web`) — the B2B hook. Do not
   build the B2B flow yet.

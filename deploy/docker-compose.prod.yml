@@ -1,0 +1,188 @@
+# Production stack for the EC2 instance. Lives at /opt/vivid, shipped there by
+# .github/workflows/vivid-backend.yml.
+#
+# Differences from the repo-root compose, which is a dev file:
+#   - images are pulled from GHCR, never built here
+#   - no source bind mounts and no --reload
+#   - Postgres and Redis are not published to the host at all
+#   - everything restarts unless explicitly stopped, so a reboot recovers
+#     without needing a registry pull
+#
+# Interpolated from /opt/vivid/.env (see app.env.example for the split):
+#   IMAGE_REPO, IMAGE_TAG, POSTGRES_PASSWORD, MINIO_ROOT_USER,
+#   MINIO_ROOT_PASSWORD, DOMAIN, BACKEND_BIND, S3_PUBLIC_ENDPOINT_URL
+# The :? entries below fail the deploy loudly rather than silently booting on a
+# development default. JWT_SECRET is the one that matters most: it lives in
+# app.env, and its code default ("change-me-in-prod") signs valid tokens.
+
+x-backend-env: &backend-env
+  # Infrastructure wiring is fixed here so app.env cannot break it. Compose
+  # applies `environment` after `env_file`, so these win on conflict.
+  DATABASE_URL: postgresql+asyncpg://vivid:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in /opt/vivid/.env}@postgres:5432/vivid
+  REDIS_URL: redis://redis:6379/0
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_ACCESS_KEY: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in /opt/vivid/.env}
+  S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in /opt/vivid/.env}
+  S3_BUCKET: vivid
+  # Presigned URLs are handed to the browser, so they must be signed against
+  # the address the browser can reach (see the note in config.py).
+  S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-}
+  SANDBOX_URL: http://sandbox:8080
+  VIVID_TOOLS_URL: http://vivid-tools:8005
+  ENV: production
+
+x-backend-image: &backend-image
+  image: ${IMAGE_REPO:?set IMAGE_REPO}/vivid-backend:${IMAGE_TAG:?set IMAGE_TAG (deploy.sh passes it)}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vivid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: vivid
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vivid"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # Playwright. Needs outbound internet; its own SSRF guard blocks private
+  # targets. Each browser context is 150-250MB, so max_sessions drives the
+  # instance's memory requirement more than anything else here.
+  vivid-tools:
+    image: ${IMAGE_REPO:?set IMAGE_REPO}/vivid-tools:${IMAGE_TAG:?set IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      BROWSER_TOKEN: ${BROWSER_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8005/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # Runs model-generated code. The isolation is the point and it is unchanged
+  # from dev: internal-only network (no internet, no secrets), read-only root,
+  # capped memory, pids and cpu. Do not attach this to the default network.
+  sandbox:
+    image: ${IMAGE_REPO:?set IMAGE_REPO}/vivid-sandbox:${IMAGE_TAG:?set IMAGE_TAG}
+    restart: unless-stopped
+    networks:
+      - sandbox_net
+    read_only: true
+    tmpfs:
+      - /tmp:size=96m
+    mem_limit: 1536m
+    pids_limit: 128
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    <<: *backend-image
+    restart: unless-stopped
+    env_file:
+      # Secrets and model service URLs. Deliberately required: a missing file
+      # fails the deploy instead of starting with config.py's dev defaults.
+      - app.env
+    environment:
+      <<: *backend-env
+    # Bound to loopback by default so only Caddy can reach it. Set
+    # BACKEND_BIND=0.0.0.0 in .env to serve directly on :8000 without TLS.
+    ports:
+      - "${BACKEND_BIND:-127.0.0.1}:8000:8000"
+    networks:
+      - default
+      - sandbox_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      sandbox:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/v1/health', timeout=5)"]
+      interval: 15s
+      timeout: 8s
+      retries: 5
+      start_period: 40s
+
+  worker:
+    <<: *backend-image
+    restart: unless-stopped
+    command: arq app.workers.worker.WorkerSettings
+    env_file:
+      - app.env
+    environment:
+      <<: *backend-env
+    networks:
+      - default
+      - sandbox_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Terminates TLS and proxies to the backend, which is what makes the chat
+  # websocket usable from an HTTPS frontend. Certificates are issued and
+  # renewed automatically for DOMAIN.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in /opt/vivid/.env, or remove the caddy service}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  caddydata:
+  caddyconfig:
+
+networks:
+  sandbox_net:
+    internal: true

@@ -1,0 +1,15 @@
+# Fronts the backend with automatic HTTPS. DOMAIN comes from /opt/vivid/.env.
+
+{$DOMAIN} {
+	encode zstd gzip
+	# reverse_proxy upgrades websockets on its own, so /ws needs no special case.
+	reverse_proxy backend:8000
+}
+
+# Attachments are served by presigned URL, and the signature covers the host,
+# so MinIO needs its own name rather than a path prefix on the one above.
+# Point S3_PUBLIC_ENDPOINT_URL at https://storage.<domain> to use this, and
+# give storage.<domain> its own DNS A record. Delete both if you move to real S3.
+storage.{$DOMAIN} {
+	reverse_proxy minio:9000
+}
