@@ -97,11 +97,11 @@ export const NETWORK_ERROR_MESSAGE =
 // there, a gateway with nothing behind it, a model pod that fell over. Those
 // arrive as a bare 404 or 5xx, and "Request failed (404)" tells nobody
 // anything, least of all whether it is worth trying again.
+export const SERVICE_UNAVAILABLE_MESSAGE = "Vivid is unavailable right now. Try again in a moment.";
+
 function serviceMessage(status: number): string {
   if (status === 429) return "Too many requests right now. Give it a moment and try again.";
-  if (status === 404 || status >= 500) {
-    return "Vivid is unavailable right now. Try again in a moment.";
-  }
+  if (status === 404 || status >= 500) return SERVICE_UNAVAILABLE_MESSAGE;
   return `Request failed (${status})`;
 }
 

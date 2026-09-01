@@ -15,6 +15,7 @@ import {
   usePcmStreamer,
 } from "@/lib/backend/audio";
 import {
+  chatErrorMessage,
   endAudioTurn,
   onChatEvent,
   sendAudioChunk,
@@ -245,7 +246,7 @@ export function useLiveThread(
           setBusy(false);
           setTranscribing(false);
           turnAudioRef.current = [];
-          const message = event.message ?? event.code ?? "Something went wrong";
+          const message = chatErrorMessage(event);
           setError(message);
           toast(message);
           pushActivity({

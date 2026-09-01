@@ -6,6 +6,7 @@ import {
   backend,
   getTokens,
   NETWORK_ERROR_MESSAGE,
+  SERVICE_UNAVAILABLE_MESSAGE,
   WS_URL,
   type AttachmentOut,
 } from "@/lib/backend/client";
@@ -28,6 +29,32 @@ export interface ChatEvent {
   cancelled?: boolean;
   superseded?: boolean;
   attachments?: (AttachmentOut & { url: string })[];
+}
+
+// An error event carries both a `code` naming what failed and a `message`
+// written for whoever reads the server log: "LLM returned 404: {...}", "TTS
+// request failed: ...". Those name parts of the system nobody using the app
+// has heard of, and quote a response body back at them -- what showed up in
+// the thread as "LLM returned 404:". The code says the same thing without the
+// internals, so the text comes from here instead.
+//
+// Codes are absent from this table on purpose when the server's own wording is
+// the better one: `step_limit` explains what to do next, and `connection_lost`
+// is written here in the first place.
+const ERROR_MESSAGES: Record<string, string> = {
+  llm_error: SERVICE_UNAVAILABLE_MESSAGE,
+  model_unavailable: SERVICE_UNAVAILABLE_MESSAGE,
+  tts_failed: "Vivid could not read that reply out. The answer is still here.",
+  stt_failed: "Vivid could not make out that recording. Try saying it again.",
+  unauthorized: "Your session has expired. Sign in again to carry on.",
+};
+
+// What to actually show for an error event. Falls back to the server's wording
+// only for codes this does not know, and to a plain sentence when there is no
+// wording at all -- never to a bare code, which is no more use than silence.
+export function chatErrorMessage(event: ChatEvent): string {
+  const known = event.code ? ERROR_MESSAGES[event.code] : undefined;
+  return known ?? event.message ?? "Something went wrong. Try again.";
 }
 
 type Listener = (event: ChatEvent) => void;
