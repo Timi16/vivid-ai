@@ -35,7 +35,11 @@ export default function AppLayout() {
         <Drawer.Screen name="customize" options={{ title: "Customize" }} />
         <Drawer.Screen name="discover" options={{ title: "Discover" }} />
         <Drawer.Screen name="upgrade" options={{ title: "Upgrade" }} />
-        <Drawer.Screen name="thread/[id]" options={{ title: "Thread" }} />
+        {/* A thread is not somewhere else you went, it is this screen with a
+            conversation in it -- sending the first message swaps the route
+            underneath you. Titling it "Thread" made that swap look like
+            navigation, so it carries the same name as the chat screen. */}
+        <Drawer.Screen name="thread/[id]" options={{ title: "Vivid AI" }} />
       </Drawer>
       <CommandPalette />
       <ActivityBanner />

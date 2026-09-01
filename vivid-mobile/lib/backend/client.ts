@@ -91,6 +91,20 @@ interface RequestInitPlus extends RequestInit {
 export const NETWORK_ERROR_MESSAGE =
   "Network problem: check your internet connection and try again.";
 
+// The backend sends a `detail` for every problem it means to explain -- "Chat
+// not found", a rejected upload. A failure with no detail is not a problem the
+// product is having, it is the service being absent: a route that is not
+// there, a gateway with nothing behind it, a model pod that fell over. Those
+// arrive as a bare 404 or 5xx, and "Request failed (404)" tells nobody
+// anything, least of all whether it is worth trying again.
+function serviceMessage(status: number): string {
+  if (status === 429) return "Too many requests right now. Give it a moment and try again.";
+  if (status === 404 || status >= 500) {
+    return "Vivid is unavailable right now. Try again in a moment.";
+  }
+  return `Request failed (${status})`;
+}
+
 async function request<T>(path: string, init: RequestInitPlus = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   if (tokens) headers.set("Authorization", `Bearer ${tokens.access_token}`);
@@ -112,12 +126,12 @@ async function request<T>(path: string, init: RequestInitPlus = {}, retry = true
     setTokens(null);
   }
   if (!res.ok) {
-    let detail = `Request failed (${res.status})`;
+    let detail = serviceMessage(res.status);
     try {
       const parsed = (await res.json()) as { detail?: string };
       if (typeof parsed.detail === "string") detail = parsed.detail;
     } catch {
-      // keep the status message
+      // no body to explain itself: the status is all there is to go on
     }
     throw new Error(detail);
   }

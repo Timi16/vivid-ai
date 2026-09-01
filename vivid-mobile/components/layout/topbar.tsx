@@ -20,7 +20,13 @@ export function Topbar({ navigation, route, options }: DrawerHeaderProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const canGoBack = route.name !== "index" && router.canGoBack();
+  // The chat screen and a thread are one surface: the first message replaces
+  // the route in place, so a back arrow there offers to undo something the
+  // person never did. You leave a conversation through the drawer, the way
+  // every phone chat app works. Everywhere else keeps a back arrow whenever
+  // there is genuinely something behind it.
+  const onChatSurface = route.name === "index" || route.name === "thread/[id]";
+  const canGoBack = !onChatSurface && router.canGoBack();
   const params = route.params as { topic?: string } | undefined;
   const activeTopic = route.name === "discover" ? (params?.topic ?? "discover") : null;
 

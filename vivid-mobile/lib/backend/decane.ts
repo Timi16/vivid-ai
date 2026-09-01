@@ -126,7 +126,18 @@ export function parseGoogleReturn(callbackUrl: string): GoogleReturn {
 // with what Decane sent back, or null when the user dismissed the sheet.
 export async function signInWithGoogle(): Promise<GoogleReturn> {
   const url = await fetchConsentUrl();
-  const result = await WebBrowser.openAuthSessionAsync(url, DECANE_REDIRECT_URI);
+  const result = await WebBrowser.openAuthSessionAsync(url, DECANE_REDIRECT_URI, {
+    // The sheet is the system's, but its chrome is ours, and left alone it
+    // opens white against a black app. Google's own page stays white -- that
+    // part belongs to Google.
+    toolbarColor: "#000000",
+    controlsColor: "#e8e8ea",
+    // Android only. Left at its default the tab becomes its own task, so the
+    // callback comes back as a fresh intent that can cold start the app --
+    // a second launch, and a second chance to show a blank frame. Kept in
+    // this task it returns to the instance that opened it.
+    createTask: false,
+  });
   if (result.type !== "success") return null;
   return parseGoogleReturn(result.url);
 }
