@@ -18,3 +18,31 @@ export const LANGUAGES: Language[] = [
 export function languageLabel(code: string): string {
   return LANGUAGES.find((language) => language.code === code)?.label ?? code;
 }
+
+// The empty state speaks whichever language the composer is set to, so picking
+// Yorùbá changes the greeting and the placeholder, not just what comes back.
+// Kept here beside LANGUAGES so adding a language is one edit, not three.
+//
+// Nigerian English and auto-detect fall back to English: the first is English,
+// and the second has nothing to detect from until the user speaks.
+const GREETINGS: Record<string, string> = {
+  en: "What's on your mind today?",
+  pcm: "Wetin dey your mind today?",
+  yo: "Kí ló wà lọ́kàn rẹ lónìí?",
+  ig: "Gịnị dị gị n'obi taa?",
+};
+
+const PROMPTS: Record<string, string> = {
+  en: "Ask anything…",
+  pcm: "Ask me anytin…",
+  yo: "Béèrè ohunkóhun…",
+  ig: "Jụọ ihe ọ bụla…",
+};
+
+export function greeting(code: string): string {
+  return GREETINGS[code] ?? GREETINGS.en;
+}
+
+export function askPrompt(code: string): string {
+  return PROMPTS[code] ?? PROMPTS.en;
+}

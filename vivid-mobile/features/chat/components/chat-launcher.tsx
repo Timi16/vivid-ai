@@ -8,6 +8,7 @@ import { ShuffleIcon } from "@/components/ui/icons";
 import { AppText } from "@/components/ui/text";
 import { ChatComposer } from "@/features/chat/components/chat-composer";
 import { stashPendingCall, stashPendingPrompt } from "@/features/chat/lib/handoff";
+import { greeting } from "@/features/chat/lib/languages";
 import { pickImage } from "@/features/chat/lib/pick-image";
 import { SUGGESTIONS, shuffle } from "@/features/chat/lib/suggestions";
 import type { PendingImage } from "@/features/chat/lib/types";
@@ -90,17 +91,19 @@ export function ChatLauncher({ isFirstRun = false }: ChatLauncherProps) {
 
   return (
     <View style={{ width: "100%", maxWidth: 720, alignSelf: "center", alignItems: "center" }}>
-      <AppText display size={38} lineHeight={42} style={{ marginBottom: 12 }}>
-        Vivid{" "}
-        <AppText size={38} tone={0.45}>
-          AI
+      {/* The product name lives in the top bar now, so the hero line is the
+          question rather than the branding. It follows the composer's
+          language, which is the clearest way to show the app speaks it. */}
+      <AppText display size={32} lineHeight={38} align="center" style={{ marginBottom: 12 }}>
+        {greeting(language)}
+      </AppText>
+      {isFirstRun ? (
+        <AppText size={14} tone={0.45} align="center" style={{ marginBottom: 32, maxWidth: 340 }}>
+          Ask anything, in English, Pidgin, Yorùbá or Igbo. Or tap the waveform and just talk.
         </AppText>
-      </AppText>
-      <AppText size={14} tone={0.45} align="center" style={{ marginBottom: 32, maxWidth: 340 }}>
-        {isFirstRun
-          ? "Ask anything, in English, Pidgin, Yorùbá or Igbo. Or tap the waveform and just talk."
-          : "What can I help with?"}
-      </AppText>
+      ) : (
+        <View style={{ height: 20 }} />
+      )}
 
       <View style={{ width: "100%" }}>
         <ChatComposer

@@ -22,7 +22,10 @@ export default function AppLayout() {
           swipeEdgeWidth: 40,
         }}
       >
-        <Drawer.Screen name="index" options={{ title: "New chat" }} />
+        {/* The chat screen is the product, so its header carries the product
+            name rather than a verb. Only the header reads this: the drawer
+            renders its own "New chat" button. */}
+        <Drawer.Screen name="index" options={{ title: "Vivid AI" }} />
         <Drawer.Screen name="artifacts" options={{ title: "Artifacts" }} />
         <Drawer.Screen name="history" options={{ title: "History" }} />
         <Drawer.Screen name="settings" options={{ title: "Settings" }} />

@@ -16,7 +16,7 @@ import { useTheme } from "@/hooks/use-theme";
 // only), search, and notifications. Home has nothing behind it, so it shows
 // the menu button alone.
 
-export function Topbar({ navigation, route }: DrawerHeaderProps) {
+export function Topbar({ navigation, route, options }: DrawerHeaderProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -70,7 +70,14 @@ export function Topbar({ navigation, route }: DrawerHeaderProps) {
           })}
         </ScrollView>
       ) : (
-        <View style={{ flex: 1 }} />
+        // Where the topic strip would be. The screen's own title sits here so
+        // you can always see where you are, and on the chat screen that title
+        // is the product name.
+        <View style={{ flex: 1, paddingHorizontal: 8 }}>
+          <AppText size={16} numberOfLines={1}>
+            {options.title ?? ""}
+          </AppText>
+        </View>
       )}
 
       <IconButton label="Search" onPress={() => setSearchOpen(true)}>

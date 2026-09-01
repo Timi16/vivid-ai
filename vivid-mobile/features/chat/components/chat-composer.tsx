@@ -14,7 +14,7 @@ import {
 import { Menu, MenuItem, MenuLabel } from "@/components/ui/menu";
 import { Spinner } from "@/components/ui/spinner";
 import { AppText } from "@/components/ui/text";
-import { LANGUAGES, languageLabel } from "@/features/chat/lib/languages";
+import { LANGUAGES, askPrompt, languageLabel } from "@/features/chat/lib/languages";
 import { useTheme } from "@/hooks/use-theme";
 import { FONT } from "@/lib/theme";
 
@@ -112,7 +112,11 @@ export function ChatComposer({
         value={value}
         onChangeText={onValueChange}
         multiline
-        placeholder={recording ? "Listening…" : transcribing ? "Transcribing…" : "Ask anything…"}
+        // Idle placeholder follows the chosen language; the two busy states stay
+        // in English because they report what the app is doing, not what to type.
+        placeholder={
+          recording ? "Listening…" : transcribing ? "Transcribing…" : askPrompt(language)
+        }
         placeholderTextColor={theme.fg(0.4)}
         selectionColor={theme.fg(0.5)}
         keyboardAppearance={theme.mode}
