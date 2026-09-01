@@ -109,6 +109,72 @@ that a browser on an HTTPS page will refuse the `ws://` chat connection.
 
 **6. Push to main.** The first run creates the GHCR packages and deploys.
 
+## Deploying onto a VPS that already runs Caddy
+
+The default setup assumes a dedicated box. If the target already terminates
+TLS for other sites — as `tsionark.io` does for `neutv` and friends — its
+Caddy owns :80 and :443 and the bundled one must stay out of the way. It
+does: `caddy` sits behind the `edge` compose profile, so a plain
+`docker compose up -d` (which is what `deploy.sh` runs) never starts it.
+
+**1. Check the ports are free.** The stack binds `8000` (backend) and `9000`
+(MinIO) on loopback. Postgres and Redis are not published at all, so they
+cannot collide with anything the host already runs.
+
+```bash
+sudo ss -lntp | grep -E ':(8000|9000)\b' || echo "both free"
+```
+
+**2. Add the DNS records.** Both names need an A record pointing at the VPS
+*before* the first reload, or certificate issuance fails:
+
+```
+vivid.tsionark.io           A   <vps ip>
+storage.vivid.tsionark.io   A   <vps ip>
+```
+
+The second is not optional while MinIO is the object store. Presigned URLs
+are signed over the host and path, so MinIO cannot be served under a path
+prefix on the first name — the signature would not match and every
+attachment would 403.
+
+**3. Set the two env files** as in the one-time setup above, with:
+
+```
+BACKEND_BIND=127.0.0.1
+MINIO_BIND=127.0.0.1
+DOMAIN=                                                  # unused here
+S3_PUBLIC_ENDPOINT_URL=https://storage.vivid.tsionark.io
+```
+
+and `CORS_ORIGINS` in `app.env` listing whatever origin the frontend serves
+from — remembering it is parsed as JSON.
+
+**4. Append `deploy/Caddyfile.host` to `/etc/caddy/Caddyfile`**, then:
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile   # never reload unvalidated
+sudo systemctl reload caddy
+```
+
+**5. Deploy as normal.** The GitHub workflow is unchanged; point `EC2_HOST` at
+this VPS.
+
+### Sizing
+
+Worth checking before you commit to this box. The stack wants **4GB free as a
+floor and 8GB to be comfortable**, and `vivid-tools` dominates: Playwright
+allows 8 concurrent browser contexts at 150-250MB each, on top of Postgres,
+Redis, MinIO, the backend, the worker and the sandbox. A VPS already running
+MediaMTX and two or three app servers may not have that headroom.
+
+```bash
+free -h && docker stats --no-stream
+```
+
+If it is tight, the honest fix is a second box for the model-adjacent
+services rather than shaving Playwright's pool down until browsing breaks.
+
 ## Rollback
 
 Tags are commit SHAs. Actions → vivid-backend → Run workflow, and give the SHA

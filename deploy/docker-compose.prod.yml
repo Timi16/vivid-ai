@@ -66,6 +66,12 @@ services:
     image: minio/minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
+    # Loopback only. The containerized caddy reaches it as minio:9000 over the
+    # compose network and does not need this; a HOST caddy (Caddyfile.host)
+    # does, because it is outside that network. Never 0.0.0.0 — the console on
+    # :9001 is deliberately not published at all.
+    ports:
+      - "${MINIO_BIND:-127.0.0.1}:9000:9000"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
@@ -164,8 +170,16 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    # Opt-in: `docker compose up -d` leaves this out, and `--profile edge`
+    # brings it in. A VPS that already terminates TLS for other sites has its
+    # own Caddy on :80/:443, and two of them cannot both bind those ports —
+    # use deploy/Caddyfile.host there instead. On a dedicated box, run
+    # `docker compose --profile edge up -d` and set DOMAIN.
+    profiles: ["edge"]
     environment:
-      DOMAIN: ${DOMAIN:?set DOMAIN in /opt/vivid/.env, or remove the caddy service}
+      # Soft default: required only when this service is actually started,
+      # and Caddy fails loudly on an empty site address if it is not set.
+      DOMAIN: ${DOMAIN:-}
     ports:
       - "80:80"
       - "443:443"

@@ -1,0 +1,51 @@
+# Blocks to paste into an EXISTING host Caddyfile (/etc/caddy/Caddyfile),
+# for a VPS that already terminates TLS for other sites.
+#
+# This is the alternative to deploy/Caddyfile, which is for the containerized
+# Caddy in docker-compose.prod.yml. Use one or the other, never both — they
+# would fight over :80 and :443. With these blocks, start the stack WITHOUT
+# the caddy service (it sits behind the `edge` profile, so plain
+# `docker compose up -d` already leaves it out).
+#
+# Requires, in /opt/vivid/.env:
+#   BACKEND_BIND=127.0.0.1
+#   S3_PUBLIC_ENDPOINT_URL=https://storage.vivid.tsionark.io
+# and DNS A records for BOTH names pointing at this VPS.
+
+vivid.tsionark.io {
+	encode zstd gzip
+
+	# Managed browsing (POST /v1/browser/tasks) reports progress as
+	# server-sent events, held open for the length of the task. Without this
+	# Caddy buffers the response and the caller sees nothing until the task
+	# finishes — the same reason neutv's block sets it.
+	handle /v1/browser/tasks {
+		reverse_proxy 127.0.0.1:8000 {
+			flush_interval -1
+		}
+	}
+
+	# Everything else: the REST API, plus /ws (chat) and /ws/code (the coding
+	# agent). reverse_proxy upgrades websockets on its own, so they need no
+	# special case — but they are long-lived, and the coding agent can sit
+	# idle for minutes waiting on a human to approve a command, so the
+	# default timeouts must stay off.
+	handle {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# Attachments cap at 10MB in the backend and voice notes at 25MB; this is
+	# the outer bound before either gets a chance to answer politely.
+	request_body {
+		max_size 32MB
+	}
+}
+
+# Attachments are handed to the browser as presigned URLs, and an S3v4
+# signature covers the host and path. Serving MinIO under a path prefix on the
+# name above would change the signed path and every URL would 403, so it needs
+# a name of its own. No `encode`: the objects are images and audio, already
+# compressed. Delete this block if you move to real S3 or R2.
+storage.vivid.tsionark.io {
+	reverse_proxy 127.0.0.1:9000
+}
