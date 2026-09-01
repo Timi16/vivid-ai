@@ -72,6 +72,7 @@ export function Modal({
           <Glass
             tier="sheet"
             sheen
+            opaque
             radius={RADIUS.sheet}
             accessibilityViewIsModal
             accessibilityLabel={title}

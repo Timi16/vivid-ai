@@ -104,6 +104,7 @@ export function ArtifactPanel({ artifact, generating = false, onClose }: Artifac
       >
         <Glass
           tier="sheet"
+          opaque
           radius={RADIUS.sheet}
           style={{
             flex: 1,

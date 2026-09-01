@@ -1,9 +1,15 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-
 import { DECANE_REDIRECT_URI } from "@/config/env";
 
 import { parseGoogleReturn } from "./decane";
+
+// Node's built-ins are deliberately outside this project's `types`, so that
+// app code cannot reach for them. Reading the route tree off disk is the one
+// thing here that is not app code, so it borrows just the call it needs
+// rather than opening the door for everything.
+const { existsSync } = jest.requireActual("node:fs") as {
+  existsSync(path: string): boolean;
+};
+const appJson = jest.requireActual("../../app.json") as { expo: { scheme: string } };
 
 // The OS really does hand `vivid://auth` to the app, so the router has to have
 // somewhere to put it. When it did not, the callback resolved against nothing
@@ -13,15 +19,14 @@ import { parseGoogleReturn } from "./decane";
 // together.
 describe("the Decane callback URL", () => {
   it("points at the app scheme", () => {
-    const scheme = require("../../app.json").expo.scheme;
-    expect(DECANE_REDIRECT_URI.startsWith(`${scheme}://`)).toBe(true);
+    expect(DECANE_REDIRECT_URI.startsWith(`${appJson.expo.scheme}://`)).toBe(true);
   });
 
+  // Jest runs from the project root, so these are the paths expo-router would
+  // resolve the callback's own path against.
   it("has a route to land on", () => {
     const path = DECANE_REDIRECT_URI.split("://")[1].split("?")[0];
-    const app = join(__dirname, "..", "..", "app");
-    const candidates = [`${path}.tsx`, join(path, "index.tsx")];
-    expect(candidates.some((c) => existsSync(join(app, c)))).toBe(true);
+    expect([`app/${path}.tsx`, `app/${path}/index.tsx`].some(existsSync)).toBe(true);
   });
 });
 

@@ -20,6 +20,11 @@ export interface GlassProps extends ViewProps {
   // Force the blur layer on or off. Tiers carry a default; lists of cards
   // turn it off because a blur per row is expensive on Android.
   blur?: boolean;
+  // Ask for a solid ground under the material. See `grounded` below: panels
+  // that float in their own window need this on every platform, because a
+  // React Native Modal is a separate window and the blur inside it has only
+  // the scrim to sample.
+  opaque?: boolean;
   // Selected / pressed state: brighter border and a touch more light.
   active?: boolean;
   invalid?: boolean;
@@ -36,6 +41,7 @@ export function Glass({
   radius,
   sheen = false,
   blur,
+  opaque = false,
   active = false,
   invalid = false,
   style,
@@ -48,6 +54,24 @@ export function Glass({
     radius ?? (tier === "control" || tier === "bright" ? RADIUS.control : RADIUS.card);
   const showBlur = blur ?? glass.blur > 0;
   const dark = theme.mode === "dark";
+
+  // The blurred tiers carry almost no colour of their own -- 6.5% white at
+  // base, 7.5% at sheet -- because the backdrop blur is what was supposed to
+  // make them solid. Wherever that blur does not actually render, the surface
+  // turns into a sheet of glass with nothing behind it and whatever is under
+  // it reads straight through: the drawer showing the chat screen through
+  // itself, a menu showing the drawer through itself.
+  //
+  // Two places it does not render. A React Native Modal is its own window, so
+  // a blur inside one can only sample the scrim -- that is the `opaque` flag,
+  // and it holds on every platform. And on Android the underlying
+  // dimezisBlurView is unreliable, notably under the New Architecture, which
+  // this app enables.
+  //
+  // So those surfaces get the sheet colour painted under them. This is safe
+  // where the blur does work: a working blur draws over this ground and hides
+  // it completely, so nothing changes on the platforms that were already fine.
+  const grounded = showBlur && (opaque || Platform.OS === "android");
 
   const borderColor = invalid
     ? "rgba(246,165,165,0.55)"
@@ -69,7 +93,7 @@ export function Glass({
           borderRadius: resolvedRadius,
           borderWidth: 1,
           borderColor,
-          backgroundColor: glass.backgroundColor,
+          backgroundColor: grounded ? theme.colors.sheet : glass.backgroundColor,
           shadowColor: "#000",
           shadowOpacity: glass.shadowOpacity,
           shadowRadius: glass.shadowRadius,
@@ -83,6 +107,12 @@ export function Glass({
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, { borderRadius: resolvedRadius, overflow: "hidden" }]}
       >
+        {/* Under the blur on purpose: a blur that renders covers this, and
+            one that does not leaves it carrying the tint the tier is meant
+            to have over the solid ground. */}
+        {grounded ? (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: glass.backgroundColor }]} />
+        ) : null}
         {showBlur ? (
           <BlurView
             intensity={glass.blur}

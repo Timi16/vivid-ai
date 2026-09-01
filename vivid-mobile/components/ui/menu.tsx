@@ -51,6 +51,7 @@ export function Menu({ open, onOpenChange, title, anchor, width = 320, children 
     <Glass
       tier="sheet"
       sheen
+      opaque
       radius={RADIUS.sheet}
       style={
         popover
