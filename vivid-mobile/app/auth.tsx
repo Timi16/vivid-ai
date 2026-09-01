@@ -53,9 +53,11 @@ export default function AuthCallback() {
       .finally(() => setDone(true));
   }, [jwt, signedIn, params.decane_name, params.decane_email, params.decane_picture]);
 
-  // The guard in the root layout decides which shell to hand back to, so both
-  // outcomes route to "/" and let it sort them.
-  if (done) return <Redirect href="/" />;
+  // Name the destination rather than leaving it to "/". Both shells define a
+  // root, so "/" while signed out can resolve to the signed-in one, which the
+  // gate then refuses -- and a refused navigation leaves an empty screen
+  // behind rather than an error.
+  if (done) return <Redirect href={signedIn ? "/" : "/sign-in"} />;
 
   return (
     <Screen center contentStyle={{ alignItems: "center", gap: 14 }}>
