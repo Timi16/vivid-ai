@@ -1,7 +1,12 @@
 // Public runtime configuration. Everything here ships in the app binary, so
 // nothing secret belongs in this file: the backend holds the secrets.
 
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
+// Base origin of the FastAPI service, with no path: the backend client appends
+// `/v1` to every REST call and `/ws` to the websocket, so a `/v1` suffix here
+// would double up. The default is the live deployment, so a build with no
+// EXPO_PUBLIC_API_URL set still talks to a real backend; point it at a LAN IP
+// to develop against a local one.
+export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://vivid.tsionark.io";
 
 // "Continue with Google" via Decane Connect. The key is browser-safe (it is
 // origin/callback allowlisted in the Decane dashboard); the app id is public.

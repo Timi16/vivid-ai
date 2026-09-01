@@ -36,7 +36,11 @@ impl Designer {
             return Ok(());
         }
         let v: serde_json::Value =
-            self.http.get(format!("{}/models", self.base)).send().await?.json().await?;
+            crate::auth::authorize(self.http.get(format!("{}/models", self.base)))
+                .send()
+                .await?
+                .json()
+                .await?;
         self.model = v["data"][0]["id"].as_str().unwrap_or_default().to_string();
         Ok(())
     }
@@ -52,7 +56,11 @@ impl Designer {
             "temperature": 0.8,
             "max_tokens": 1400,
         });
-        let r = self.http.post(format!("{}/chat/completions", self.base)).json(&body).send().await?;
+        let r = crate::auth::authorize(
+            self.http.post(format!("{}/chat/completions", self.base)).json(&body),
+        )
+        .send()
+        .await?;
         if !r.status().is_success() {
             return Ok(None); // the designer is optional; never block the build
         }

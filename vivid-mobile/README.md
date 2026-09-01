@@ -10,7 +10,7 @@ hands-free calls).
 - Expo SDK 57, React Native 0.86, TypeScript strict, Expo Router (file-based routes)
 - TanStack Query for server state; module stores for activity, toasts, tokens, search
 - `@siteed/audio-studio` for live 16 kHz PCM mic streaming, `expo-audio` for playback
-- `expo-web-browser` for "Continue with Google" through Decane's callback flow (no SDK)
+- Decane's emailed sign-in codes for auth, called over plain `fetch` (no SDK, no provider buttons)
 - `expo-secure-store` for the token bundle, AsyncStorage for preferences and drafts
 - `react-native-webview` for HTML previews and PDFs in the artifact panel
 - `react-native-mathjax-svg` for LaTeX in answers (MathJax to SVG, no WebView)
@@ -19,7 +19,7 @@ hands-free calls).
 
 ```sh
 pnpm install
-cp .env.example .env      # then fill in EXPO_PUBLIC_API_URL (a LAN IP, not localhost)
+cp .env.example .env      # defaults to the live backend; use a LAN IP (not localhost) for a local one
 pnpm prebuild             # generates ios/ and android/
 npx expo run:ios          # or: npx expo run:android
 ```

@@ -8,15 +8,22 @@ from app.core.config import settings
 GENERATION_LOCK_TTL = 180  # seconds; safety net if a release is ever missed
 
 
-async def check_request(redis, user_id: str) -> bool:
+async def check_bucket(redis, bucket: str, limit: int) -> bool:
+    """One fixed one-minute window. `bucket` namespaces the counter, so two
+    kinds of traffic from the same person are limited separately."""
     try:
-        key = f"rl:{user_id}:{int(time.time() // 60)}"
+        key = f"{bucket}:{int(time.time() // 60)}"
         n = await redis.incr(key)
         if n == 1:
             await redis.expire(key, 90)
-        return n <= settings.RATE_LIMIT_PER_MINUTE
+        return n <= limit
     except Exception:
         return True
+
+
+async def check_request(redis, user_id: str) -> bool:
+    return await check_bucket(redis, f"rl:{user_id}",
+                              settings.RATE_LIMIT_PER_MINUTE)
 
 
 async def acquire_generation(redis, user_id: str) -> bool:

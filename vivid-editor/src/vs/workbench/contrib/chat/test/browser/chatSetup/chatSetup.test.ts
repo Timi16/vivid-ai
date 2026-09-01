@@ -95,6 +95,24 @@ suite('Chat setup dialog presentation', () => {
 
 	ensureNoDisposablesAreLeakedInTestSuite();
 
+	test('collapses providers that name one identity to a single button', () => {
+		// Vivid points every provider slot at the same account. Without the
+		// collapse the dialog shows three identical buttons carrying GitHub,
+		// Google and Apple icons for vendors nobody is signing in to.
+		const buttons = getChatSetupDialogButtons(ChatEntitlement.Unknown, undefined, false, {
+			default: { name: 'Vivid' },
+			enterprise: { name: 'Vivid' },
+			google: { name: 'Vivid' },
+			apple: { name: 'Vivid' },
+		});
+
+		assert.deepStrictEqual(buttons, [{
+			label: 'Continue with Vivid',
+			strategy: ChatSetupStrategy.SetupWithoutEnterpriseProvider,
+			classes: ['continue-button', 'default'],
+		}]);
+	});
+
 	test('places signed-out continuation after providers', () => {
 		const buttons = getChatSetupDialogButtons(ChatEntitlement.Unknown, { allowContinueWithoutSignIn: true }, false, {
 			default: { name: 'GitHub' },

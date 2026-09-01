@@ -3,6 +3,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 
+import { Account } from "./account";
+
 /** One event line from `vivid --json` on stdout. */
 export interface Event {
   type: string;
@@ -18,6 +20,9 @@ export interface Event {
 export class Engine implements vscode.Disposable {
   private proc: cp.ChildProcessWithoutNullStreams | undefined;
   private buffer = "";
+  /** In flight while the credential is being fetched, so two prompts arriving
+   * together start one engine rather than racing to write to a missing pipe. */
+  private starting: Promise<void> | undefined;
   private readonly onEventEmitter = new vscode.EventEmitter<Event>();
   readonly onEvent = this.onEventEmitter.event;
 
@@ -25,6 +30,7 @@ export class Engine implements vscode.Disposable {
     private readonly cwd: string,
     private readonly output: vscode.OutputChannel,
     private readonly extensionPath: string,
+    private readonly account: Account,
   ) {}
 
   /**
@@ -53,9 +59,15 @@ export class Engine implements vscode.Disposable {
     return this.proc !== undefined && this.proc.exitCode === null;
   }
 
-  start(): void {
-    if (this.running) return;
+  start(): Promise<void> {
+    if (this.running) return Promise.resolve();
+    if (this.starting) return this.starting;
+    this.starting = this.launch().finally(() => { this.starting = undefined; });
+    return this.starting;
+  }
 
+  private async launch(): Promise<void> {
+    const token = await this.account.token();
     const cfg = vscode.workspace.getConfiguration("vivid");
     const bin = this.resolveBinary(cfg.get<string>("binaryPath") || "vivid");
     const args = ["--json", "--dir", this.cwd,
@@ -72,7 +84,11 @@ export class Engine implements vscode.Disposable {
     try {
       this.proc = cp.spawn(bin, args, {
         cwd: this.cwd,
-        env: { ...process.env },
+        // The key goes in the environment rather than on the command line:
+        // argv is world-readable in `ps`, and this is a long-lived credential.
+        // A key stored here wins over the binary's own ~/.vivid/auth.toml,
+        // which is what makes signing in from the editor mean anything.
+        env: token ? { ...process.env, VIVID_TOKEN: token } : { ...process.env },
       });
     } catch (e) {
       this.fail(`could not start ${bin}: ${e}`);
@@ -130,8 +146,8 @@ export class Engine implements vscode.Disposable {
     this.proc.stdin.write(JSON.stringify(frame) + "\n");
   }
 
-  prompt(text: string): void {
-    if (!this.running) this.start();
+  async prompt(text: string): Promise<void> {
+    if (!this.running) await this.start();
     this.send({ type: "prompt", text });
   }
 

@@ -7,7 +7,7 @@ import assert from 'assert';
 import { mock } from '../../../../../../base/test/common/mock.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
 import type { IAgentSdkSetupInfo } from '../../../../../../platform/agentHost/common/agentSdkSetup.js';
-import { AGENT_SDK_SETUP_DOWNLOAD_COMMAND_ID, AGENT_SDK_SETUP_GITHUB_SIGN_IN_COMMAND_ID, AGENT_SDK_SETUP_OPEN_DOCS_COMMAND_ID, AGENT_SDK_SETUP_RELOAD_COMMAND_ID, AGENT_SDK_SETUP_SIGN_IN_COMMAND_ID, agentSdkSetupNotificationId, createAgentSdkSetupNotification, getAgentDisplayNames, getAgentSdkSetupState, getAgentSdkSetupStateToReport, hasAgentSdkSetupNotification, type IAgentSdkSetupStateInputs } from '../../../browser/agentSessions/agentHost/agentHostSdkSetupNotification.js';
+import { AGENT_SDK_SETUP_DOWNLOAD_COMMAND_ID, AGENT_SDK_SETUP_PROVIDER_SIGN_IN_COMMAND_ID, AGENT_SDK_SETUP_OPEN_DOCS_COMMAND_ID, AGENT_SDK_SETUP_RELOAD_COMMAND_ID, AGENT_SDK_SETUP_SIGN_IN_COMMAND_ID, agentSdkSetupNotificationId, createAgentSdkSetupNotification, getAgentDisplayNames, getAgentSdkSetupState, getAgentSdkSetupStateToReport, hasAgentSdkSetupNotification, type IAgentSdkSetupStateInputs } from '../../../browser/agentSessions/agentHost/agentHostSdkSetupNotification.js';
 import type { AgentSdkSetupState } from '../../../../../services/agentHost/browser/agentSdkSetupService.js';
 import { ChatInputNotificationActionKind, ChatInputNotificationSeverity, type IChatInputNotification, type IChatInputNotificationAction, type IChatInputNotificationService } from '../../../browser/widget/input/chatInputNotificationService.js';
 import { SessionType } from '../../../common/chatSessionsService.js';
@@ -84,8 +84,8 @@ suite('Agent SDK setup banner', () => {
 			});
 		});
 
-		test('a missing account offers every route the agent declared, GitHub sign-in last', () => {
-			// Last is the primary button in the widget, and GitHub is the route that
+		test('a missing account offers every route the agent declared, the Vivid sign-in last', () => {
+			// Last is the primary button in the widget, and Vivid is the route that
 			// works whatever the user has (or has not) set up elsewhere.
 			const codex: IAgentSdkSetupInfo = { agent: 'codex', download: 'ready', setupDocsUrl: 'https://example.test/codex', signInProviderName: 'ChatGPT' };
 			const buttons = (setup: IAgentSdkSetupInfo, displayName: string) =>
@@ -99,10 +99,10 @@ suite('Agent SDK setup banner', () => {
 			}, {
 				// Docs are a link in the description, never a button — so declaring a
 				// docs URL and declaring nothing produce the same row of buttons.
-				docsOnly: [AGENT_SDK_SETUP_GITHUB_SIGN_IN_COMMAND_ID],
-				signInOnly: [AGENT_SDK_SETUP_SIGN_IN_COMMAND_ID, AGENT_SDK_SETUP_GITHUB_SIGN_IN_COMMAND_ID],
-				both: [AGENT_SDK_SETUP_SIGN_IN_COMMAND_ID, AGENT_SDK_SETUP_GITHUB_SIGN_IN_COMMAND_ID],
-				neither: [AGENT_SDK_SETUP_GITHUB_SIGN_IN_COMMAND_ID],
+				docsOnly: [AGENT_SDK_SETUP_PROVIDER_SIGN_IN_COMMAND_ID],
+				signInOnly: [AGENT_SDK_SETUP_SIGN_IN_COMMAND_ID, AGENT_SDK_SETUP_PROVIDER_SIGN_IN_COMMAND_ID],
+				both: [AGENT_SDK_SETUP_SIGN_IN_COMMAND_ID, AGENT_SDK_SETUP_PROVIDER_SIGN_IN_COMMAND_ID],
+				neither: [AGENT_SDK_SETUP_PROVIDER_SIGN_IN_COMMAND_ID],
 			});
 		});
 
@@ -113,19 +113,19 @@ suite('Agent SDK setup banner', () => {
 			// The agent id, not the URL or the provider: each command resolves what it
 			// needs from the agent's own declaration rather than trusting the banner.
 			assert.deepStrictEqual(notification.actions.map(action => action.kind === ChatInputNotificationActionKind.Command ? action.commandArgs : undefined), [['codex'], ['codex']]);
-			assert.deepStrictEqual(notification.actions.map(action => action.label), ['Sign in to ChatGPT', 'Sign in to GitHub']);
+			assert.deepStrictEqual(notification.actions.map(action => action.label), ['Sign in to ChatGPT', 'Sign in to Vivid']);
 		});
 
 		test('the routes named in the copy are the ones the agent declared, ranked as the buttons rank them', () => {
 			// One whole sentence per combination rather than joined clauses, since a
-			// translator reorders them freely. GitHub appears in all four: every agent
+			// translator reorders them freely. Vivid appears in all four: every agent
 			// behind this banner reaches models through our proxy once signed in.
 			const noAccount = (setup: Omit<IAgentSdkSetupInfo, 'agent' | 'download'>) => {
 				const description = createAgentSdkSetupNotification({ agent: 'claude', download: 'ready', ...setup }, 'Claude', 'noAccount')?.description;
 				return typeof description === 'string' ? description : description?.value;
 			};
 			// Leads every variant, as the primary button does.
-			const gitHub = 'Sign in to GitHub to use GitHub Copilot models';
+			const provider = 'Sign in to Vivid to use Vivid\'s models';
 			// Unconditional: setup finished in a terminal has no completion signal, so
 			// every agent needs the "look again" route whatever else it declares.
 			const reload = `[reload the configuration](command:${AGENT_SDK_SETUP_RELOAD_COMMAND_ID}?%255B%2522claude%2522%255D) if you have set up Claude elsewhere.`;
@@ -134,15 +134,15 @@ suite('Agent SDK setup banner', () => {
 			const docs = `For other ways to set up Claude, [learn more](command:${AGENT_SDK_SETUP_OPEN_DOCS_COMMAND_ID}?%255B%2522claude%2522%255D) on their docs.`;
 
 			assert.deepStrictEqual({
-				gitHubOnly: noAccount({}),
+				providerOnly: noAccount({}),
 				docs: noAccount({ setupDocsUrl: 'https://example.test/claude' }),
 				signIn: noAccount({ signInProviderName: 'ChatGPT' }),
 				both: noAccount({ setupDocsUrl: 'https://example.test/claude', signInProviderName: 'ChatGPT' }),
 			}, {
-				gitHubOnly: `${gitHub} or ${reload}`,
-				docs: `${gitHub} or ${reload} ${docs}`,
-				signIn: `${gitHub}, sign in to ChatGPT to use your ChatGPT subscription, or ${reload}`,
-				both: `${gitHub}, sign in to ChatGPT to use your ChatGPT subscription, or ${reload} ${docs}`,
+				providerOnly: `${provider} or ${reload}`,
+				docs: `${provider} or ${reload} ${docs}`,
+				signIn: `${provider}, sign in to ChatGPT to use your ChatGPT subscription, or ${reload}`,
+				both: `${provider}, sign in to ChatGPT to use your ChatGPT subscription, or ${reload} ${docs}`,
 			});
 		});
 
@@ -158,7 +158,7 @@ suite('Agent SDK setup banner', () => {
 			const name = 'Claude \\[x\\]\\(command:evil\\)';
 
 			assert.strictEqual(typeof description === 'string' ? description : description?.value,
-				`Sign in to GitHub to use GitHub Copilot models, sign in to Chat\\[G\\]PT to use your Chat\\[G\\]PT subscription, or [reload the configuration](command:${AGENT_SDK_SETUP_RELOAD_COMMAND_ID}?%255B%2522claude%2522%255D) if you have set up ${name} elsewhere. For other ways to set up ${name}, [learn more](command:${AGENT_SDK_SETUP_OPEN_DOCS_COMMAND_ID}?%255B%2522claude%2522%255D) on their docs.`);
+				`Sign in to Vivid to use Vivid's models, sign in to Chat\\[G\\]PT to use your Chat\\[G\\]PT subscription, or [reload the configuration](command:${AGENT_SDK_SETUP_RELOAD_COMMAND_ID}?%255B%2522claude%2522%255D) if you have set up ${name} elsewhere. For other ways to set up ${name}, [learn more](command:${AGENT_SDK_SETUP_OPEN_DOCS_COMMAND_ID}?%255B%2522claude%2522%255D) on their docs.`);
 		});
 
 		test('the copy is trusted for its own two commands alone, so its links render and reach nothing else', () => {

@@ -1,4 +1,5 @@
 mod agent;
+mod auth;
 mod brief;
 mod browser;
 mod config;
@@ -64,6 +65,13 @@ struct Args {
     /// No model involved: `vivid --check http://localhost:3000`
     #[arg(long, value_name = "URL")]
     check: Option<String>,
+    /// Sign in to Vivid with an API key, then exit. Reads the key from the
+    /// terminal, or from a pipe: `echo vk_… | vivid --login`
+    #[arg(long)]
+    login: bool,
+    /// Forget the stored Vivid login on this machine, then exit
+    #[arg(long)]
+    logout: bool,
 }
 
 #[tokio::main]
@@ -72,6 +80,17 @@ async fn main() -> Result<()> {
     if args.json {
         jsonio::enable();
     }
+    // Signing in and out touch no project, so they run before the working
+    // directory is resolved — `vivid --login` from anywhere is the point.
+    if args.logout {
+        auth::logout()?;
+        return Ok(());
+    }
+    if args.login {
+        let cfg = config::Config::load(args.url.clone(), None, true, None);
+        return auth::login(&cfg.url, None).await;
+    }
+
     let root = args.dir.clone().unwrap_or(std::env::current_dir()?);
     std::fs::create_dir_all(&root)?;
     let root = root.canonicalize()?;
@@ -142,10 +161,18 @@ async fn main() -> Result<()> {
                 // In JSON mode a bare `?` exits with a stderr line the editor
                 // never shows anyone. Say what went wrong on the protocol.
                 if args.json {
+                    // Distinct code for a rejected credential: the editor can
+                    // offer a sign-in for that, where "unreachable" would only
+                    // send the user looking at their network.
+                    let code = if auth::is_auth_failure(&e) {
+                        "unauthorized"
+                    } else {
+                        "engine_unreachable"
+                    };
                     jsonio::emit(
                         "error",
                         serde_json::json!({
-                            "code": "engine_unreachable",
+                            "code": code,
                             "message": format!("{e:#}"),
                             "url": cfg.url,
                         }),

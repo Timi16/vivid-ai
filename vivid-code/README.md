@@ -10,16 +10,40 @@ vivid                       # interactive
 vivid --dir ./my-site --yolo "build a landing page for a Lagos bakery"
 ```
 
+## Sign in
+
+Vivid Code reaches models through the Vivid backend, not a pod, so it needs a
+Vivid account:
+
+```
+vivid --login                 # paste a Vivid API key (vk_…)
+echo vk_… | vivid --login     # non-interactive, for CI
+vivid --logout
+```
+
+The key is verified against `/auth/me` before it is stored, and it lands in
+`~/.vivid/auth.toml` with owner-only permissions. `VIVID_TOKEN` overrides the
+stored key for a single run. Mint a key from the backend:
+
+```
+docker compose exec backend python -m app.scripts.create_api_key "Timi's laptop"
+```
+
 ## Config
 
 Any of `--url` / `--model`, the `VIVID_URL` / `VIVID_MODEL` env vars, or
 `~/.vivid/config.toml`:
 
 ```toml
-url = "https://your-engine-endpoint/v1"
-# model is discovered from the endpoint when omitted
+url = "https://your-vivid-backend/v1"   # default: http://localhost:8000/v1
+# model is discovered from the endpoint when omitted, and the backend's
+# default is `vivid-code`. `vivid-chat` is the assistant model.
 context_budget = 24000
 ```
+
+There is no pod address here. The backend resolves `vivid-code` to whichever
+RunPod endpoint currently serves it, so a pod move needs no new binary, and
+every call is attributed to an account.
 
 Build: `cargo build --release` → `target/release/vivid`.
 Install: `cargo install --path .` → `vivid` on your PATH.
@@ -27,8 +51,9 @@ Install: `cargo install --path .` → `vivid` on your PATH.
 ## How it works
 
 ```
-vivid (this binary) ──HTTPS──▶ Vivid Code engine
-  loop + all tools run here     stateless token service
+vivid (this binary) ──HTTPS+Bearer──▶ Vivid backend /v1 ──▶ RunPod pod
+  loop + all tools run here            auth, model alias,     stateless
+                                       rate limit, usage      token service
 ```
 
 - `src/agent.rs` — engine → tool calls → run → append → repeat (max 60 steps)

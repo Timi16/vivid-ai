@@ -10,7 +10,6 @@ import { isCancellationError } from '../../../../base/common/errors.js';
 import { StopWatch } from '../../../../base/common/stopwatch.js';
 import { URI } from '../../../../base/common/uri.js';
 import { isWindows, isMacintosh, isLinux } from '../../../../base/common/platform.js';
-import { assertDefined } from '../../../../base/common/types.js';
 import { FileAccess } from '../../../../base/common/network.js';
 import { ILayoutService } from '../../../../platform/layout/browser/layoutService.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
@@ -77,8 +76,20 @@ type OnboardingActionEvent = {
 
 type EnterpriseSignInUiState = 'options' | 'instance' | 'progress';
 
-assertDefined(product.defaultChatAgent, 'Onboarding requires a default chat agent product configuration.');
-const defaultChat = product.defaultChatAgent;
+// This wizard onboards a hosted chat provider (Copilot / GitHub Enterprise).
+// Vivid ships no such provider, so the config is absent — and asserting on it
+// at module load took the whole workbench down before the window could paint.
+// Fall back to empty strings and let `show()` decline instead.
+const defaultChat = product.defaultChatAgent ?? {
+	privacyStatementUrl: '',
+	termsStatementUrl: '',
+	publicCodeMatchesUrl: '',
+	providerUriSetting: '',
+	provider: {
+		default: { name: '' },
+		enterprise: { id: '', name: '' },
+	},
+} as unknown as NonNullable<typeof product.defaultChatAgent>;
 
 /**
  * Variation A — Classic Wizard Modal
@@ -166,6 +177,9 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	show(): void {
+		if (!product.defaultChatAgent) {
+			return; // nothing to onboard without a chat provider
+		}
 		if (this.overlay) {
 			return;
 		}

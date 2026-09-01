@@ -1,0 +1,187 @@
+name: Deploy backend
+
+# One EC2 box runs the API, the worker, Postgres, Redis, MinIO and the code
+# sandbox under docker compose. Pushing to `prod` builds the two images here,
+# pushes them to GHCR, then tells the box to pull and restart.
+#
+# The browser service (vivid-tools) is deliberately not here: it runs on its
+# own box and is deployed separately. See docs/DEPLOY.md. Images are built on runners rather than on the instance:
+# the box is sized to serve traffic, not to compile Playwright and Torch-free
+# Python wheels, and a build that fails should fail before production is
+# touched.
+#
+# Secrets stay on the box in /opt/vivid/.env and never pass through CI.
+# See docs/DEPLOY.md for the one-time setup.
+
+on:
+  push:
+    branches: [prod]
+    paths:
+      - "vivid-backend/**"
+      - "sandbox/**"
+      - "docker-compose.prod.yml"
+      - ".github/workflows/deploy-backend.yml"
+      - ".github/scripts/deploy-remote.sh"
+  # Redeploy the current `prod` commit by hand, for a rollback or a box that
+  # was rebuilt.
+  workflow_dispatch:
+
+# Never run two deploys at once, and never cancel one halfway: an interrupted
+# `compose up` leaves the stack in a state nobody chose.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # A syntax error reaching the box would take the stack down for a
+      # container restart loop. This costs seconds and catches that.
+      - name: Compile all Python
+        run: python -m compileall -q vivid-backend/app sandbox
+
+      - name: Validate the production compose file
+        env:
+          IMAGE_PREFIX: ghcr.io/placeholder
+          IMAGE_TAG: validate
+          POSTGRES_PASSWORD: validate
+          JWT_SECRET: validate
+          BROWSER_TOKEN: validate
+          S3_ACCESS_KEY: validate
+          S3_SECRET_KEY: validate
+        # The stack reads its real secrets from .env on the box; compose still
+        # wants the file to exist to validate, so give it an empty one here.
+        run: |
+          touch .env
+          docker compose -f docker-compose.prod.yml config --quiet
+
+  build:
+    name: build ${{ matrix.image }}
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: vivid-backend
+            context: ./vivid-backend
+          - image: vivid-sandbox
+            context: ./sandbox
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Registry namespace
+        id: meta
+        # GHCR rejects uppercase, and the org name has capitals.
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          # The commit sha is what the box actually runs, so a rollback is
+          # "deploy that sha". `prod` is a convenience pointer for humans.
+          tags: |
+            ${{ steps.meta.outputs.prefix }}/${{ matrix.image }}:${{ github.sha }}
+            ${{ steps.meta.outputs.prefix }}/${{ matrix.image }}:prod
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Registry namespace
+        id: meta
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Authorise SSH
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_PORT: ${{ vars.EC2_PORT || '22' }}
+          EC2_HOST_KEY: ${{ secrets.EC2_HOST_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "$EC2_HOST_KEY" ]; then
+            # Pinned host key: the deploy fails rather than trusting a
+            # different machine answering on that address.
+            printf '%s\n' "$EC2_HOST_KEY" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$EC2_PORT" -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Copy the compose file
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_PORT: ${{ vars.EC2_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/vivid' }}
+        # The box runs the compose file from this commit, not whatever was
+        # left there last time.
+        run: |
+          scp -i ~/.ssh/deploy_key -P "$EC2_PORT" \
+            docker-compose.prod.yml "$EC2_USER@$EC2_HOST:$DEPLOY_PATH/docker-compose.prod.yml"
+
+      - name: Pull and restart
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_PORT: ${{ vars.EC2_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/vivid' }}
+          IMAGE_PREFIX: ${{ steps.meta.outputs.prefix }}
+          IMAGE_TAG: ${{ github.sha }}
+          GHCR_USER: ${{ github.actor }}
+          # Short-lived and scoped to this run: nothing durable is left on the
+          # box to steal, and the script logs out when it is done.
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # The values go down the encrypted channel inside the script body
+        # rather than on the command line, so they never appear in the box's
+        # process list.
+        run: |
+          {
+            printf 'export IMAGE_PREFIX=%q IMAGE_TAG=%q GHCR_USER=%q GHCR_TOKEN=%q DEPLOY_PATH=%q\n' \
+              "$IMAGE_PREFIX" "$IMAGE_TAG" "$GHCR_USER" "$GHCR_TOKEN" "$DEPLOY_PATH"
+            cat .github/scripts/deploy-remote.sh
+          } | ssh -i ~/.ssh/deploy_key -p "$EC2_PORT" "$EC2_USER@$EC2_HOST" 'bash -s'
+
+      - name: Report
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "### Deployed \`${GITHUB_SHA:0:7}\` to production :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Deploy of \`${GITHUB_SHA:0:7}\` failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "The box rolls itself back to the last healthy release; check the step log." >> "$GITHUB_STEP_SUMMARY"
+          fi

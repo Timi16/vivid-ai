@@ -1,0 +1,60 @@
+{
+	"name": "vivid-auth",
+	"displayName": "Vivid Account",
+	"description": "Sign in to Vivid with Google or an emailed code, through Decane Connect.",
+	"publisher": "vivid",
+	"license": "MIT",
+	"version": "0.0.1",
+	"engines": {
+		"vscode": "^1.100.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"extensionKind": [
+		"ui",
+		"workspace"
+	],
+	"activationEvents": [
+		"onAuthenticationRequest:vivid"
+	],
+	"capabilities": {
+		"virtualWorkspaces": true,
+		"untrustedWorkspaces": {
+			"supported": true
+		}
+	},
+	"contributes": {
+		"authentication": [
+			{
+				"label": "Vivid",
+				"id": "vivid"
+			}
+		],
+		"commands": [
+			{
+				"command": "vivid-auth.signIn",
+				"title": "Sign in to Vivid",
+				"category": "Vivid"
+			},
+			{
+				"command": "vivid-auth.signOut",
+				"title": "Sign out of Vivid",
+				"category": "Vivid"
+			}
+		]
+	},
+	"main": "./out/extension.js",
+	"scripts": {
+		"compile": "gulp compile-extension:vivid-auth",
+		"watch": "gulp watch-extension:vivid-auth"
+	},
+	"dependencies": {},
+	"devDependencies": {
+		"@types/node": "24.x"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Worldstreet-Web-Services/vivid-ai.git"
+	}
+}

@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     # Served max_model_len is 100k; the loop budgets below it so a long tool
     # result cannot push a request over the served limit mid-session.
     CODE_CONTEXT_TOKENS: int = 90000
+    # The served window itself, as advertised to clients through /v1/models.
+    # Distinct from CODE_CONTEXT_TOKENS above: that is the loop's self-imposed
+    # budget, this is what the pod will actually accept, and a client sizing
+    # its own context needs the real number.
+    CODE_LLM_CONTEXT_TOKENS: int = 100_000
     # Tool calls per user turn. Real refactors run 20-40; the cap is a runaway
     # guard, and hitting it ends the turn cleanly rather than erroring.
     CODE_MAX_STEPS: int = 50
@@ -135,6 +140,19 @@ class Settings(BaseSettings):
     # ~0.2s/clip; WazobiaVoice is ~6s/clip regardless of length, and yo/ig
     # must translate the full text first — those get one clip at the end).
     TTS_STREAM_LANGS: list[str] = ["en"]
+
+    # --- /v1 model proxy (Vivid Code, the VS Code extension, the editor) ---
+    # Developer tools speak OpenAI over /v1/chat/completions. They point here
+    # rather than at a pod so every call carries a Vivid identity. Turning this
+    # off leaves those clients with nowhere to go — it is not a safe default.
+    MODEL_PROXY_ENABLED: bool = True
+    # Ceiling on max_tokens for one proxied reply. A tool-calling agent asks
+    # for a lot; this stops a single client reserving the whole KV cache.
+    MODEL_PROXY_MAX_TOKENS: int = 16384
+    # Proxy calls a minute, per credential. Separate from RATE_LIMIT_PER_MINUTE
+    # because an agent loop makes many small calls per human action, where a
+    # chat turn makes one.
+    MODEL_PROXY_RATE_LIMIT_PER_MINUTE: int = 120
 
     # Limits
     RATE_LIMIT_PER_MINUTE: int = 20

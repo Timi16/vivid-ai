@@ -93,6 +93,7 @@ export enum ChatConfiguration {
 	GrowthNotificationEnabled = 'chat.growthNotification.enabled',
 	TitleBarSignInEnabled = 'chat.titleBar.signIn.enabled',
 	TitleBarOpenInAgentsWindowEnabled = 'chat.titleBar.openInAgentsWindow.enabled',
+	AgentsWindowEnabled = 'chat.agentsWindow.enabled',
 
 	ChatCustomizationsStructuredPreviewEnabled = 'chat.customizations.structuredPreview.enabled',
 	ChatCustomizationsPromptMigrationEnabled = 'chat.customizations.promptMigration.enabled',
@@ -578,7 +579,13 @@ export const OPEN_AGENTS_WINDOW_PRECONDITION = ContextKeyExpr.and(
 	ChatEntitlementContextKeys.Setup.disabledInWorkspace.negate(),
 	IsSessionsWindowContext.negate(),
 	ContextKeyExpr.has(`config.${ChatConfiguration.AgentEnabled}`),
-	IsAuxiliaryWindowContext.negate()
+	IsAuxiliaryWindowContext.negate(),
+	// Vivid is one window. Off by default, this gate hides every route to the
+	// separate Agents window at once: the title bar button, the command
+	// palette entries and the keyboard shortcut. The sessions themselves are
+	// unaffected, because the main window already renders them in the chat
+	// view (see `ChatViewSessionsEnabled`).
+	ContextKeyExpr.equals(`config.${ChatConfiguration.AgentsWindowEnabled}`, true)
 );
 
 export const ChatEditorTitleMaxLength = 30;

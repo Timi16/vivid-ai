@@ -1,12 +1,26 @@
 //! Where the engine lives. Precedence: CLI flag > env > ~/.vivid/config.toml.
 //! The model id is discovered from the endpoint when it is not configured, so
 //! no vendor string is ever baked into Vivid Code.
+//!
+//! That endpoint is the Vivid backend, not a pod. Vivid Code used to ship the
+//! address of a RunPod proxy, which meant an unauthenticated GPU on the open
+//! internet, a re-release every time a pod moved, and no way to tell whose
+//! work any of the traffic was. The backend answers the same OpenAI shape,
+//! resolves `vivid-code` to whichever pod currently serves it, and knows who
+//! is asking.
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 
-pub const DEFAULT_URL: &str = "https://hvexdqvqqnotd4-8000.proxy.runpod.net/v1";
-/// The chat pod writes the design briefs; it has better taste than the coder.
-pub const DEFAULT_DESIGN_URL: &str = "https://bff4kyzmm1kn35-8000.proxy.runpod.net/v1";
+use crate::auth;
+
+/// The backend's OpenAI-compatible root. Deployment-specific, so this is the
+/// local one: point `VIVID_URL` (or `url` in ~/.vivid/config.toml) at your
+/// deployment. There is deliberately no hosted address baked in — the last one
+/// outlived the pod it named.
+pub const DEFAULT_URL: &str = "http://localhost:8000/v1";
+/// The design brief goes to the assistant model, which has better taste than
+/// the coder. Same endpoint, different alias — one backend serves both.
+pub const DEFAULT_DESIGN_MODEL: &str = "vivid-chat";
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -53,17 +67,23 @@ impl Config {
             .or(file.model);
         let url = if url.ends_with("/v1") { url } else { format!("{}/v1", url.trim_end_matches('/')) };
         Config {
-            url,
+            url: url.clone(),
             model,
             stream,
             context_budget: file.context_budget.unwrap_or(24_000),
             context_budget_explicit: file.context_budget.is_some(),
             max_reply_tokens: file.max_reply_tokens.unwrap_or(16_000),
+            // Design briefs come from the same backend by default; only a
+            // deployment that puts the two models behind different hosts needs
+            // to say so.
             design_url: design_flag
                 .or_else(|| std::env::var("VIVID_DESIGN_URL").ok())
                 .or(file.design_url)
-                .or_else(|| Some(DEFAULT_DESIGN_URL.to_string())),
-            design_model: std::env::var("VIVID_DESIGN_MODEL").ok().or(file.design_model),
+                .or_else(|| Some(url.clone())),
+            design_model: std::env::var("VIVID_DESIGN_MODEL")
+                .ok()
+                .or(file.design_model)
+                .or_else(|| Some(DEFAULT_DESIGN_MODEL.to_string())),
         }
     }
 }
@@ -91,6 +111,7 @@ pub async fn discover(base: &str) -> Result<(String, Option<u32>)> {
     for attempt in 1..=6u32 {
         match discover_once(base).await {
             Ok(v) => return Ok(v),
+            Err(e) if auth::is_auth_failure(&e) => return Err(e),
             Err(e) => {
                 if attempt < 6 {
                     let wait = std::time::Duration::from_millis(500u64 << (attempt - 1).min(4));
@@ -113,13 +134,18 @@ async fn discover_once(base: &str) -> Result<(String, Option<u32>)> {
         .connect_timeout(std::time::Duration::from_secs(20))
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
-    let r = http
-        .get(format!("{}/models", base.trim_end_matches('/')))
+    let r = auth::authorize(http.get(format!("{}/models", base.trim_end_matches('/'))))
         .send()
         .await
         .map_err(|e| anyhow!("cannot reach the engine at {base}: {e}"))?;
     let status = r.status();
     let body = r.text().await.unwrap_or_default();
+    // Discovery is the first call of every run, so it is where a missing or
+    // stale login gets caught. Typed, so the retry loop above stops instead of
+    // spending thirty seconds treating "signed out" as "the pod is booting".
+    if let Some(explanation) = auth::explain(status, &body) {
+        return Err(auth::AuthError(explanation).into());
+    }
     // A pod that is asleep or booting answers with an HTML holding page, not JSON.
     if body.trim_start().starts_with('<') {
         return Err(anyhow!(

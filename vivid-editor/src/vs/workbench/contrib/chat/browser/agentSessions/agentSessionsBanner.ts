@@ -7,10 +7,11 @@ import { $, addDisposableListener } from '../../../../../base/browser/dom.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { localize } from '../../../../../nls.js';
 import { ICommandService, CommandsRegistry } from '../../../../../platform/commands/common/commands.js';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { IChatEntitlementService } from '../../../../services/chat/common/chatEntitlementService.js';
 
-import { OPEN_WORKSPACE_IN_AGENTS_WINDOW_COMMAND_ID } from '../../common/constants.js';
+import { ChatConfiguration, OPEN_WORKSPACE_IN_AGENTS_WINDOW_COMMAND_ID } from '../../common/constants.js';
 import { AgentsWindowOpenSource } from '../../../../../platform/window/common/window.js';
 
 
@@ -36,10 +37,18 @@ export interface IAgentsBannerResult {
  * The banner requires the open agents window command
  * to be registered (desktop builds only) and is limited to Insiders quality.
  * It is also hidden when AI features are disabled.
+ *
+ * The banner advertises a separate window, so it is hidden along with the rest
+ * of those entry points when {@link ChatConfiguration.AgentsWindowEnabled} is
+ * off. That setting is checked here rather than through the shared
+ * precondition because this is plain rendering code with no context key scope.
  */
-export function canShowAgentsBanner(chatEntitlementService: IChatEntitlementService): boolean {
+export function canShowAgentsBanner(chatEntitlementService: IChatEntitlementService, configurationService: IConfigurationService): boolean {
 	const sentiment = chatEntitlementService.sentiment;
 	if (sentiment.hidden || sentiment.disabled) {
+		return false;
+	}
+	if (configurationService.getValue<boolean>(ChatConfiguration.AgentsWindowEnabled) !== true) {
 		return false;
 	}
 	return !!CommandsRegistry.getCommand(OPEN_WORKSPACE_IN_AGENTS_WINDOW_COMMAND_ID);

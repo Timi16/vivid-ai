@@ -21,7 +21,9 @@
       { "command": "vivid.focus", "title": "Vivid: Focus the agent", "category": "Vivid" },
       { "command": "vivid.cancel", "title": "Vivid: Cancel the current turn", "category": "Vivid" },
       { "command": "vivid.restart", "title": "Vivid: Restart the engine", "category": "Vivid" },
-      { "command": "vivid.askAboutSelection", "title": "Vivid: Ask about the selection", "category": "Vivid" }
+      { "command": "vivid.askAboutSelection", "title": "Vivid: Ask about the selection", "category": "Vivid" },
+      { "command": "vivid.signIn", "title": "Vivid: Sign in with Vivid", "category": "Vivid" },
+      { "command": "vivid.signOut", "title": "Vivid: Sign out", "category": "Vivid" }
     ],
     "menus": {
       "editor/context": [
@@ -42,12 +44,12 @@
         "vivid.engineUrl": {
           "type": "string",
           "default": "",
-          "description": "Engine endpoint (…/v1). Empty uses the binary's own default or ~/.vivid/config.toml."
+          "description": "Vivid backend endpoint (…/v1). Empty uses the binary's own default or ~/.vivid/config.toml. The agent reaches models through here, never a pod directly."
         },
         "vivid.model": {
           "type": "string",
           "default": "",
-          "description": "Model id. Empty lets the binary discover it from the endpoint."
+          "description": "Model alias — vivid-code or vivid-chat. Empty lets the binary discover the default from the endpoint."
         },
         "vivid.noDesign": {
           "type": "boolean",

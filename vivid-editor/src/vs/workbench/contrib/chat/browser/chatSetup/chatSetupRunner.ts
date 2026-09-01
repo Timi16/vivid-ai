@@ -168,6 +168,27 @@ export async function showChatSetupDialogWithCancellation(
 	}
 }
 
+/**
+ * Keep one button per distinct label, first occurrence winning.
+ *
+ * A deployment may point every provider slot at a single identity — Vivid does,
+ * naming all four the same — and the dialog then rendered three identical
+ * "Continue with Vivid" buttons wearing GitHub, Google and Apple icons, plus a
+ * fourth as a link. That offers a choice that does not exist, and the icons
+ * name vendors the user is not signing in to. Where the labels genuinely
+ * differ, every provider is kept.
+ */
+function dedupeProviderButtons(buttons: IChatSetupDialogButton[]): IChatSetupDialogButton[] {
+	const seen = new Set<string>();
+	return buttons.filter(button => {
+		if (seen.has(button.label)) {
+			return false;
+		}
+		seen.add(button.label);
+		return true;
+	});
+}
+
 export function getChatSetupDialogButtons(entitlement: ChatEntitlement, options: IChatSetupRunOptions | undefined, enterpriseAuthentication: boolean, providers: IChatSetupDialogProviders = defaultChat.provider): IChatSetupDialogButton[] {
 	const button = (label: string, strategy: ChatSetupStrategy, ...classes: string[]): IChatSetupDialogButton => ({ label, strategy, classes });
 
@@ -179,9 +200,9 @@ export function getChatSetupDialogButtons(entitlement: ChatEntitlement, options:
 		const googleProviderButton = button(localize('continueWith', "Continue with {0}", providers.google.name), ChatSetupStrategy.SetupWithGoogleProvider, 'continue-button', 'google');
 		const appleProviderButton = button(localize('continueWith', "Continue with {0}", providers.apple.name), ChatSetupStrategy.SetupWithAppleProvider, 'continue-button', 'apple');
 
-		const providerButtons = enterpriseAuthentication
+		const providerButtons = dedupeProviderButtons(enterpriseAuthentication
 			? [enterpriseProviderButton, googleProviderButton, appleProviderButton, defaultProviderLink]
-			: [defaultProviderButton, googleProviderButton, appleProviderButton, enterpriseProviderLink];
+			: [defaultProviderButton, googleProviderButton, appleProviderButton, enterpriseProviderLink]);
 		return options?.allowContinueWithoutSignIn
 			? [...providerButtons, button(localize('continueWithoutSigningIn', "Continue Without Signing In"), ChatSetupStrategy.Canceled, 'link-button')]
 			: providerButtons;

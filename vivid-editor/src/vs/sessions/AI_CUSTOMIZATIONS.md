@@ -17,7 +17,10 @@ The shared management editor and contracts live under:
 
 The Agents Window contributes:
 
-- the customizations tree and overview under `vs/sessions/contrib/aiCustomizationTreeView/`;
+- the sessions-only focus action under `vs/sessions/contrib/aiCustomizationTreeView/`. The
+  customizations tree and overview themselves moved down to
+  `vs/workbench/contrib/chat/browser/aiCustomization/treeView/` so the main window can show
+  them too, in its secondary side bar;
 - Sessions-specific workspace and harness adapters under `vs/sessions/contrib/chat/`;
 - Sessions sidebar entry points under `vs/sessions/contrib/sessions/`.
 

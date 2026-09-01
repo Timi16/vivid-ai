@@ -1,0 +1,21 @@
+{
+  "name": "theme-vivid",
+  "displayName": "Vivid Theme",
+  "description": "The Vivid colour theme — the same palette as the Vivid web app.",
+  "publisher": "vivid",
+  "license": "MIT",
+  "version": "1.0.0",
+  "engines": { "vscode": "*" },
+  "categories": ["Themes"],
+  "contributes": {
+    "themes": [
+      {
+        "id": "Vivid Dark",
+        "label": "Vivid Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/vivid-dark-color-theme.json"
+      }
+    ]
+  },
+  "repository": { "type": "git", "url": "https://github.com/Worldstreet-Web-Services/vivid-ai.git" }
+}

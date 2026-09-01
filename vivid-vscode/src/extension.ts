@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { Account } from "./account";
 import { Engine, Event } from "./engine";
 
 /**
@@ -43,8 +44,9 @@ export function activate(context: vscode.ExtensionContext) {
     return;
   }
 
-  const engine = new Engine(folder.uri.fsPath, output, context.extensionPath);
-  const provider = new AgentView(context.extensionUri, engine, before, output);
+  const account = new Account(context.secrets, output);
+  const engine = new Engine(folder.uri.fsPath, output, context.extensionPath, account);
+  const provider = new AgentView(context.extensionUri, engine, before, output, account);
   context.subscriptions.push(
     engine,
     vscode.window.registerWebviewViewProvider("vivid.agent", provider),
@@ -52,6 +54,15 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.commands.executeCommand("vivid.agent.focus")),
     vscode.commands.registerCommand("vivid.cancel", () => engine.cancel()),
     vscode.commands.registerCommand("vivid.restart", () => provider.restart()),
+    vscode.commands.registerCommand("vivid.signIn", async () => {
+      // The engine picks up the credential at spawn, so a sign-in only takes
+      // effect on a restart — do it here rather than leaving the user to.
+      if (await account.signIn()) provider.restart();
+    }),
+    vscode.commands.registerCommand("vivid.signOut", async () => {
+      await account.signOut();
+      provider.restart();
+    }),
     vscode.commands.registerCommand("vivid.askAboutSelection", async () => {
       const ed = vscode.window.activeTextEditor;
       if (!ed || ed.selection.isEmpty) return;
@@ -75,6 +86,7 @@ class AgentView implements vscode.WebviewViewProvider {
     private readonly engine: Engine,
     private readonly before: BeforeProvider,
     private readonly output: vscode.OutputChannel,
+    private readonly account: Account,
   ) {
     this.engine.onEvent((ev) => this.handle(ev));
   }
@@ -90,7 +102,7 @@ class AgentView implements vscode.WebviewViewProvider {
     view.webview.onDidReceiveMessage((m) => {
       switch (m.type) {
         case "prompt":
-          this.engine.prompt(m.text);
+          void this.engine.prompt(m.text);
           break;
         case "approval":
           this.engine.approve(m.id, m.ok);
@@ -106,14 +118,14 @@ class AgentView implements vscode.WebviewViewProvider {
 
     if (!this.started) {
       this.started = true;
-      this.engine.start();
+      void this.engine.start();
     }
   }
 
   restart() {
     this.engine.dispose();
     this.post({ type: "info", message: "Restarting the engine…" });
-    setTimeout(() => this.engine.start(), 1200);
+    setTimeout(() => void this.engine.start(), 1200);
   }
 
   seed(text: string) {
@@ -123,6 +135,16 @@ class AgentView implements vscode.WebviewViewProvider {
   private readonly diffs = new Map<number, { path: string; uri: vscode.Uri }>();
 
   private handle(ev: Event) {
+    if (ev.type === "error" && ev.code === "unauthorized") {
+      // The engine cannot do anything until this is resolved, so it is worth a
+      // modal-adjacent prompt rather than a line in the log the user scrolls past.
+      void vscode.window
+        .showErrorMessage(ev.message ?? "Vivid needs you to sign in.", "Sign in with Vivid")
+        .then((choice) => {
+          if (choice) void vscode.commands.executeCommand("vivid.signIn");
+        });
+    }
+
     if (ev.type === "diff") {
       // Stash both sides now; the user may click through to the diff later.
       const seq = ++this.diffSeq;

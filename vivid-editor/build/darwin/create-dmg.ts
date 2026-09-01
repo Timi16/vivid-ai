@@ -162,18 +162,10 @@ async function main(buildDir?: string, outDir?: string): Promise<void> {
 	const artifactPath = path.join(outDir, `${dmgName}.dmg`);
 	const backgroundPath = path.join(import.meta.dirname, `dmg-background-${quality}.tiff`);
 	const diskIconPath = path.join(root, 'resources', 'darwin', 'code.icns');
-	let title = 'Code OSS';
-	switch (quality) {
-		case 'stable':
-			title = 'VS Code';
-			break;
-		case 'insider':
-			title = 'VS Code Insiders';
-			break;
-		case 'exploration':
-			title = 'VS Code Exploration';
-			break;
-	}
+	// The mounted volume is named after the product being shipped. This used to
+	// be a switch over `quality` that produced "VS Code" whatever was actually
+	// built, so a Vivid disk image mounted under someone else's name.
+	const title = product.nameLong;
 
 	if (!fs.existsSync(appPath)) {
 		throw new Error(`App path does not exist: ${appPath}`);
@@ -196,7 +188,10 @@ async function main(buildDir?: string, outDir?: string): Promise<void> {
 	settingsContent = settingsContent
 		.replace('{{VOLUME_NAME}}', JSON.stringify(title))
 		.replace('{{BADGE_ICON}}', JSON.stringify(diskIconPath))
-		.replace('{{BACKGROUND}}', JSON.stringify(backgroundPath))
+		// Only the three upstream qualities ship a background image. A build
+		// without one gets a plain window rather than a crash, and never
+		// borrows artwork branded for a different product.
+		.replace('{{BACKGROUND}}', fs.existsSync(backgroundPath) ? JSON.stringify(backgroundPath) : 'None')
 		.replace('{{APP_PATH}}', JSON.stringify(appPath))
 		.replace('{{APP_NAME}}', JSON.stringify(product.nameLong + '.app'));
 	fs.writeFileSync(settingsFile, settingsContent);

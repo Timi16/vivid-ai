@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(vscode-)",
+      "Bash(rg -n \"vscode-\\\\$\\\\{|BUILD_TARGETS|`vscode-)",
+      "Bash(darwin\" build/gulpfile.vscode.ts | head -20)",
+      "Bash(rg -n 'BUILD_TARGETS|vscode-\\\\$\\\\{platform\\\\}|task\\\\.define|namedTask|min-ci' build/gulpfile.vscode.ts)",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s -o /dev/null -w \"https health: %{http_code}\\\\n\" --max-time 10 https://vivid.tsionark.io/health)",
+      "Bash(curl -s --max-time 10 https://vivid.tsionark.io/health)",
+      "Bash(curl -s -o /dev/null -w \"http root: %{http_code}\\\\n\" --max-time 10 http://vivid.tsionark.io/health)",
+      "Bash(curl -s --max-time 8 http://vivid.tsionark.io/)",
+      "Bash(rg -n \"VSCode-darwin-.*\\\\.dmg|create-dmg\" build/azure-pipelines/darwin/*.yml build/azure-pipelines/darwin/steps/*.yml)"
+    ]
+  }
+}

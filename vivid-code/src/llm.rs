@@ -77,6 +77,11 @@ const MAX_ATTEMPTS: u32 = 10;
 /// Retry only what a retry can actually fix. Reqwest wraps its causes, so this
 /// reads the rendered message rather than matching a dozen concrete types.
 fn retryable(e: &anyhow::Error) -> bool {
+    // Checked by type first: a rejected credential answers the same way every
+    // time, and its message quotes the server's, which may contain anything.
+    if crate::auth::is_auth_failure(e) {
+        return false;
+    }
     let s = format!("{e:#}").to_lowercase();
     [
         "connection reset",
@@ -181,16 +186,20 @@ impl Client {
             body["stream_options"] = json!({"include_usage": true});
         }
 
-        let resp = self
-            .http
-            .post(format!("{}/chat/completions", self.base))
-            .json(&body)
-            .send()
-            .await
-            .context("request to the engine failed")?;
+        let resp = crate::auth::authorize(
+            self.http.post(format!("{}/chat/completions", self.base)).json(&body),
+        )
+        .send()
+        .await
+        .context("request to the engine failed")?;
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
+            // Retrying a rejected credential just spends the backoff budget on
+            // the same answer, so this leaves the loop typed rather than raw.
+            if let Some(explanation) = crate::auth::explain(status, &text) {
+                return Err(crate::auth::AuthError(explanation).into());
+            }
             return Err(anyhow!("engine returned {status}: {}", text.chars().take(600).collect::<String>()));
         }
 

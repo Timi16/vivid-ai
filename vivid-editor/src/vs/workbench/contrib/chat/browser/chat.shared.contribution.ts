@@ -2253,6 +2253,11 @@ configurationRegistry.registerConfiguration({
 			description: nls.localize('chat.titleBar.openInAgentsWindow.enabled', "Controls whether the Open in Agents Window button is shown in the title bar."),
 			default: true,
 		},
+		[ChatConfiguration.AgentsWindowEnabled]: {
+			type: 'boolean',
+			description: nls.localize('chat.agentsWindow.enabled', "Controls whether agent sessions can be opened in a separate Agents window. When disabled, everything stays in one window: sessions appear in the chat view and the Agents window entry points are hidden."),
+			default: false,
+		},
 		'chat.approvedAccountOrganizations': {
 			type: 'array',
 			items: { type: 'string' },

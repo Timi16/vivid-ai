@@ -50,7 +50,7 @@ type AgentSdkSetupFunnelStep =
 	| 'downloadClicked'
 	| 'consentedDownload'
 	| 'docsClicked'
-	| 'gitHubSignInClicked'
+	| 'providerSignInClicked'
 	| 'signInClicked'
 	| 'reloadClicked';
 
@@ -61,7 +61,7 @@ interface IAgentSdkSetupFunnelEvent {
 
 type AgentSdkSetupFunnelClassification = {
 	agent: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'The agent whose setup this step belongs to, e.g. claude or codex.' };
-	step: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Which step of the agent SDK setup funnel was reached (downloadOffered, downloadClicked, consentedDownload, noAccount, docsClicked, gitHubSignInClicked, signInClicked, reloadClicked, resolved).' };
+	step: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Which step of the agent SDK setup funnel was reached (downloadOffered, downloadClicked, consentedDownload, noAccount, docsClicked, providerSignInClicked, signInClicked, reloadClicked, resolved).' };
 	owner: 'TylerLeonhardt';
 	comment: 'Tracks how far a signed-out user gets through setting up their own Claude or Codex account.';
 };
@@ -88,8 +88,8 @@ export interface IAgentSdkSetupService {
 	 */
 	requestReload(agent: string): void;
 
-	/** Start GitHub sign-in, which reaches every agent's models through our proxy. */
-	signInToGitHub(agent: string): void;
+	/** Start the Vivid sign-in, which reaches every agent's models through our proxy. */
+	signInToChatProvider(agent: string): void;
 
 	/** Start `agent`'s own sign-in flow, if it declared one. */
 	signIn(agent: string): void;
@@ -188,10 +188,12 @@ class AgentSdkSetupService extends Disposable implements IAgentSdkSetupService {
 		this._dispatchRequest(AGENT_SDK_SETUP_RELOAD_REQUEST_KEY, agent);
 	}
 
-	signInToGitHub(agent: string): void {
-		// A thin wrapper over the ordinary Copilot sign-in, taking the agent id only
-		// to attribute the click — which is the funnel's most telling drop.
-		this._reportStep(agent, 'gitHubSignInClicked');
+	signInToChatProvider(agent: string): void {
+		// A thin wrapper over the ordinary chat sign-in, taking the agent id only
+		// to attribute the click — which is the funnel's most telling drop. Which
+		// account that is comes from `defaultChatAgent.provider` in product.json,
+		// and for Vivid every slot points at the Vivid provider.
+		this._reportStep(agent, 'providerSignInClicked');
 		void this._commandService.executeCommand(CHAT_SETUP_COMMAND_ID);
 	}
 

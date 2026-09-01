@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-PUBLIC-BACKEND",
+        "EXPO_PUBLIC_API_URL": "https://vivid.tsionark.io",
         "EXPO_PUBLIC_DECANE_APP_ID": "70cad8bc-c917-49b2-9253-b1777d41dab3",
         "EXPO_PUBLIC_DECANE_API_KEY": "dck_live_ryzm2OssO0vohZ_RHXZbKieX_7b_7IJ4",
         "EXPO_PUBLIC_PREVIEW_FEATURES": "0"
@@ -22,7 +22,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-PUBLIC-BACKEND",
+        "EXPO_PUBLIC_API_URL": "https://vivid.tsionark.io",
         "EXPO_PUBLIC_DECANE_APP_ID": "70cad8bc-c917-49b2-9253-b1777d41dab3",
         "EXPO_PUBLIC_DECANE_API_KEY": "dck_live_ryzm2OssO0vohZ_RHXZbKieX_7b_7IJ4",
         "EXPO_PUBLIC_PREVIEW_FEATURES": "0"

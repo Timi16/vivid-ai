@@ -21,3 +21,8 @@ dist/
 # purpose (vivid-editor ships ~40 of them, vivid-vscode has its launch
 # configs). Unanchored, it silently dropped all of them from commits.
 /.vscode/
+
+# Local macOS packaging output: the built .app and its disk image.
+# 1.4G and 291M respectively, reproducible from `gulp vscode-darwin-arm64-min`.
+VSCode-darwin-arm64/
+dmg-out/

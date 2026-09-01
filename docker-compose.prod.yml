@@ -1,0 +1,165 @@
+# The production stack for the single EC2 box.
+#
+# Differences from docker-compose.yml (which is for laptops): images come from
+# the registry instead of being built here, no source is mounted, no reload,
+# nothing restarts by hand, and every credential must be supplied. Compose
+# fails fast with `${VAR:?...}` rather than starting the stack on a dev
+# default, because a JWT secret of "dev-secret-change-me" in production is
+# worse than an outage.
+#
+# Deployed by .github/workflows/deploy-backend.yml. Secrets live in
+# /opt/vivid/.env on the box and never pass through CI. See docs/DEPLOY.md.
+
+x-logging: &logging
+  # One box holds every service, so unbounded logs are a disk-full outage.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-backend-env: &backend-env
+  # Everything else (model URLs, API keys, Decane, search dials) comes from
+  # .env via env_file. These are the wiring compose itself owns, and they
+  # override anything of the same name in .env.
+  DATABASE_URL: postgresql+asyncpg://vivid:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/vivid
+  REDIS_URL: redis://redis:6379/0
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_BUCKET: ${S3_BUCKET:-vivid}
+  SANDBOX_URL: http://sandbox:8080
+  # The browser service (Playwright) runs on its own box: Chromium is the
+  # heaviest, crashiest thing in the stack and it renders pages chosen by
+  # users and models, so it does not belong next to the database. Must be
+  # https, because the token below crosses the internet to reach it.
+  VIVID_TOOLS_URL: ${VIVID_TOOLS_URL:?set VIVID_TOOLS_URL in .env (the browser service's https URL)}
+  VIVID_TOOLS_TOKEN: ${BROWSER_TOKEN:?set BROWSER_TOKEN in .env}
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+  # Passwords are a test-only path; production is Decane (Google + emailed
+  # codes) and nothing else. Stated explicitly so nobody has to remember the
+  # default.
+  ALLOW_PASSWORD_AUTH: "false"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: vivid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: vivid
+    # No published port: the database is reachable only from this compose
+    # network. Use `docker compose exec postgres psql` to get in.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vivid"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *logging
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    logging: *logging
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env}
+    # Browsers download attachments straight from here through the presigned
+    # URLs the backend signs, so this port has to be reachable and
+    # S3_PUBLIC_ENDPOINT_URL must be the address they can reach it at.
+    ports:
+      - "${MINIO_BIND:-0.0.0.0}:9000:9000"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # Runs model-written code: no secrets, no internet (internal-only network),
+  # read-only filesystem, capped memory, processes and CPU.
+  sandbox:
+    image: ${IMAGE_PREFIX:?set by the deploy workflow}/vivid-sandbox:${IMAGE_TAG:?set by the deploy workflow}
+    restart: unless-stopped
+    logging: *logging
+    networks:
+      - sandbox_net
+    read_only: true
+    tmpfs:
+      - /tmp:size=96m
+    mem_limit: 1536m
+    pids_limit: 128
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ${IMAGE_PREFIX:?set by the deploy workflow}/vivid-backend:${IMAGE_TAG:?set by the deploy workflow}
+    restart: unless-stopped
+    logging: *logging
+    # Bind to 0.0.0.0 when the security group is the only thing in front, or
+    # set BACKEND_BIND=127.0.0.1 in .env when nginx or Caddy terminates TLS on
+    # the box.
+    ports:
+      - "${BACKEND_BIND:-0.0.0.0}:8000:8000"
+    env_file: .env
+    environment:
+      <<: *backend-env
+    networks:
+      - default
+      - sandbox_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      sandbox:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/v1/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  worker:
+    image: ${IMAGE_PREFIX:?set by the deploy workflow}/vivid-backend:${IMAGE_TAG:?set by the deploy workflow}
+    restart: unless-stopped
+    logging: *logging
+    command: arq app.workers.worker.WorkerSettings
+    env_file: .env
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+
+networks:
+  sandbox_net:
+    internal: true

@@ -158,6 +158,39 @@ class Connector(Base):
                             "provider", unique=True),)
 
 
+class ModelUsage(Base):
+    """One row per completed /v1/chat/completions call through the proxy.
+
+    This table is the whole point of making developer tools go through the
+    backend: a pod hit directly serves traffic nobody can attribute, bill or
+    cut off. Written after the reply finishes — including after a stream
+    closes — so `completion_tokens` is the real figure rather than an estimate.
+
+    Both credential kinds are recorded. `user_id` is always the human (a
+    partner key resolves to its service account); `api_key_id` is set only when
+    a key was used, which is what separates "Timi in the editor" from "Timi's
+    CI job" in the same user's totals.
+    """
+    __tablename__ = "model_usage"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    api_key_id: Mapped[str | None] = mapped_column(
+        ForeignKey("api_keys.id", ondelete="SET NULL"), default=None, index=True)
+    client_id: Mapped[str] = mapped_column(String(64), default=settings.DEFAULT_CLIENT_ID)
+    #: The public alias asked for (`vivid-code`), not the vendor model id — the
+    #: vendor string changes when a pod is re-provisioned and would break
+    #: any usage history keyed on it.
+    model: Mapped[str] = mapped_column(String(64), index=True)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    stream: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, index=True)
+
+
 class MessageEmbedding(Base):
     __tablename__ = "message_embeddings"
 

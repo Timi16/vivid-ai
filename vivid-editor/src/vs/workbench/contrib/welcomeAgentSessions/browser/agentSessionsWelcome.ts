@@ -605,7 +605,7 @@ export class AgentSessionsWelcomePage extends EditorPane {
 		}));
 
 		// "Try out the new Agents app" banner
-		if (canShowAgentsBanner(this.chatEntitlementService)) {
+		if (canShowAgentsBanner(this.chatEntitlementService, this.configurationService)) {
 			const agentsBanner = createAgentsBanner(
 				{
 					cssClass: 'agentSessionsWelcome-agentsBanner',

@@ -7,6 +7,7 @@ import { Disposable, DisposableStore } from '../../../../../../base/common/lifec
 import { Event } from '../../../../../../base/common/event.js';
 import { createCommandUri, escapeMarkdownSyntaxTokens, IMarkdownString, MarkdownString } from '../../../../../../base/common/htmlContent.js';
 import { localize } from '../../../../../../nls.js';
+import product from '../../../../../../platform/product/common/product.js';
 import { AgentHostAllowSignedOutWhenUsableSettingId, IAgentHostService } from '../../../../../../platform/agentHost/common/agentService.js';
 import { LOCAL_AGENT_HOST_SCHEME_PREFIX } from '../../../../../../platform/agentHost/common/agentHostConnectionsService.js';
 import type { AgentSdkDownloadStatus, IAgentSdkSetupInfo } from '../../../../../../platform/agentHost/common/agentSdkSetup.js';
@@ -28,7 +29,7 @@ import { ILanguageModelsService } from '../../../common/languageModels.js';
 export interface IAgentSdkSetupStateInputs {
 	/** The experimentation flag this whole feature stays behind. */
 	readonly allowSignedOutWhenUsable: boolean;
-	/** Whether the user is signed in to GitHub (Copilot models already work). */
+	/** Whether the user is signed in to the chat provider (models already work). */
 	readonly signedIn: boolean;
 	/** Whether entitlement has settled; before that "signed out" is not yet a fact. */
 	readonly entitlementResolved: boolean;
@@ -94,9 +95,19 @@ function setupMarkdown(value: string): MarkdownString {
  * The "no account" second line: one whole sentence per combination of routes,
  * never assembled from localized fragments, because clause order is not stable
  * across languages. The routes share one "or" list, ranked as the buttons rank
- * them and led by the unconditional GitHub clause: reaching models through our
+ * them and led by the unconditional provider clause: reaching models through our
  * Copilot proxy is workbench knowledge, not something an agent declares.
  */
+/**
+ * The account name shown wherever the chat sign-in is offered. Read from
+ * product.json rather than written into the copy, so a rebrand is a config
+ * change and no string can drift out of step with where the button actually
+ * goes.
+ */
+function chatProviderName(): string {
+	return product.defaultChatAgent?.provider?.default?.name ?? 'Vivid';
+}
+
 function noAccountDescription(setup: IAgentSdkSetupInfo, displayName: string): IMarkdownString {
 	// Both nouns are the host's, and this string is trusted for two commands, so
 	// they are escaped rather than interpolated raw: `[]()` in a name would
@@ -109,15 +120,15 @@ function noAccountDescription(setup: IAgentSdkSetupInfo, displayName: string): I
 	const reload = createCommandUri(AGENT_SDK_SETUP_RELOAD_COMMAND_ID, setup.agent).toString();
 	const docs = setup.setupDocsUrl ? createCommandUri(AGENT_SDK_SETUP_OPEN_DOCS_COMMAND_ID, setup.agent).toString() : undefined;
 	if (provider && docs) {
-		return setupMarkdown(localize('agentHost.sdkSetup.noAccountDescription.all', "Sign in to GitHub to use GitHub Copilot models, sign in to {2} to use your {2} subscription, or [reload the configuration]({1}) if you have set up {0} elsewhere. For other ways to set up {0}, [learn more]({3}) on their docs.", name, reload, provider, docs));
+		return setupMarkdown(localize('agentHost.sdkSetup.noAccountDescription.all', "Sign in to {4} to use Vivid's models, sign in to {2} to use your {2} subscription, or [reload the configuration]({1}) if you have set up {0} elsewhere. For other ways to set up {0}, [learn more]({3}) on their docs.", name, reload, provider, docs, chatProviderName()));
 	}
 	if (provider) {
-		return setupMarkdown(localize('agentHost.sdkSetup.noAccountDescription.signIn', "Sign in to GitHub to use GitHub Copilot models, sign in to {2} to use your {2} subscription, or [reload the configuration]({1}) if you have set up {0} elsewhere.", name, reload, provider));
+		return setupMarkdown(localize('agentHost.sdkSetup.noAccountDescription.signIn', "Sign in to {3} to use Vivid's models, sign in to {2} to use your {2} subscription, or [reload the configuration]({1}) if you have set up {0} elsewhere.", name, reload, provider, chatProviderName()));
 	}
 	if (docs) {
-		return setupMarkdown(localize('agentHost.sdkSetup.noAccountDescription.docs', "Sign in to GitHub to use GitHub Copilot models or [reload the configuration]({1}) if you have set up {0} elsewhere. For other ways to set up {0}, [learn more]({2}) on their docs.", name, reload, docs));
+		return setupMarkdown(localize('agentHost.sdkSetup.noAccountDescription.docs', "Sign in to {3} to use Vivid's models or [reload the configuration]({1}) if you have set up {0} elsewhere. For other ways to set up {0}, [learn more]({2}) on their docs.", name, reload, docs, chatProviderName()));
 	}
-	return setupMarkdown(localize('agentHost.sdkSetup.noAccountDescription', "Sign in to GitHub to use GitHub Copilot models or [reload the configuration]({1}) if you have set up {0} elsewhere.", name, reload));
+	return setupMarkdown(localize('agentHost.sdkSetup.noAccountDescription', "Sign in to {2} to use Vivid's models or [reload the configuration]({1}) if you have set up {0} elsewhere.", name, reload, chatProviderName()));
 }
 
 /**
@@ -216,8 +227,10 @@ export function createAgentSdkSetupNotification(setup: IAgentSdkSetupInfo, displ
 		actions.push(action(localize('agentHost.sdkSetup.signInAction', "Sign in to {0}", setup.signInProviderName), AGENT_SDK_SETUP_SIGN_IN_COMMAND_ID));
 	}
 	// Last, because the widget styles the final action as the primary button and
-	// this is the route that works whatever the user has set up elsewhere.
-	actions.push(action(localize('agentHost.sdkSetup.gitHubSignInAction', "Sign in to GitHub"), AGENT_SDK_SETUP_GITHUB_SIGN_IN_COMMAND_ID));
+	// this is the route that works whatever the user has set up elsewhere. The
+	// account is whatever `defaultChatAgent.provider` names, which for Vivid is
+	// the Vivid account -- the only way to reach Vivid's models.
+	actions.push(action(localize('agentHost.sdkSetup.providerSignInAction', "Sign in to {0}", chatProviderName()), AGENT_SDK_SETUP_PROVIDER_SIGN_IN_COMMAND_ID));
 	return {
 		...base,
 		message: localize('agentHost.sdkSetup.noAccount', "Choose how you want to use {0}.", displayName),
@@ -233,7 +246,7 @@ export function createAgentSdkSetupNotification(setup: IAgentSdkSetupInfo, displ
 export const AGENT_SDK_SETUP_DOWNLOAD_COMMAND_ID = 'workbench.action.chat.agentHost.downloadAgentSdk';
 export const AGENT_SDK_SETUP_OPEN_DOCS_COMMAND_ID = 'workbench.action.chat.agentHost.openAgentSetupDocs';
 export const AGENT_SDK_SETUP_RELOAD_COMMAND_ID = 'workbench.action.chat.agentHost.reloadAgentConfiguration';
-export const AGENT_SDK_SETUP_GITHUB_SIGN_IN_COMMAND_ID = 'workbench.action.chat.agentHost.signInToGitHubForAgent';
+export const AGENT_SDK_SETUP_PROVIDER_SIGN_IN_COMMAND_ID = 'workbench.action.chat.agentHost.signInToProviderForAgent';
 export const AGENT_SDK_SETUP_SIGN_IN_COMMAND_ID = 'workbench.action.chat.agentHost.signInToAgent';
 
 /**
@@ -253,7 +266,7 @@ function registerAgentSdkSetupCommand(id: string, run: (setupService: IAgentSdkS
 registerAgentSdkSetupCommand(AGENT_SDK_SETUP_DOWNLOAD_COMMAND_ID, (setupService, agent) => setupService.requestDownload(agent));
 registerAgentSdkSetupCommand(AGENT_SDK_SETUP_OPEN_DOCS_COMMAND_ID, (setupService, agent) => setupService.openSetupDocs(agent));
 registerAgentSdkSetupCommand(AGENT_SDK_SETUP_RELOAD_COMMAND_ID, (setupService, agent) => setupService.requestReload(agent));
-registerAgentSdkSetupCommand(AGENT_SDK_SETUP_GITHUB_SIGN_IN_COMMAND_ID, (setupService, agent) => setupService.signInToGitHub(agent));
+registerAgentSdkSetupCommand(AGENT_SDK_SETUP_PROVIDER_SIGN_IN_COMMAND_ID, (setupService, agent) => setupService.signInToChatProvider(agent));
 registerAgentSdkSetupCommand(AGENT_SDK_SETUP_SIGN_IN_COMMAND_ID, (setupService, agent) => setupService.signIn(agent));
 
 // #endregion

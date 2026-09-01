@@ -12,7 +12,7 @@ import { IsSessionsWindowContext } from '../../../../workbench/common/contextkey
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { CustomViewVisibleContext } from '../../../common/contextkeys.js';
 import { localize } from '../../../../nls.js';
-import { FOCUS_AI_CUSTOMIZATION_VIEW_ID } from '../../aiCustomizationTreeView/browser/aiCustomizationTreeView.js';
+import { FOCUS_AI_CUSTOMIZATION_VIEW_ID } from '../../../../workbench/contrib/chat/browser/aiCustomization/treeView/aiCustomizationTreeView.js';
 import { ISessionsPartService } from '../../../services/sessions/browser/sessionsPartService.js';
 import { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 import { REPLACE_PROMPT_TEMPLATE_PLACEHOLDER_COMMAND_ID } from './promptTemplatePlaceholder.js';
