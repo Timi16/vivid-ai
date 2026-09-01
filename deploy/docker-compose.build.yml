@@ -1,0 +1,41 @@
+# Build the three images on the box instead of pulling them from GHCR.
+#
+#   docker compose -f deploy/docker-compose.prod.yml \
+#                  -f deploy/docker-compose.build.yml up -d --build
+#
+# or, from /opt/vivid with the repo checked out: BUILD=1 ./deploy.sh local
+#
+# This overlay only ADDS a `build:` section to services that already declare
+# `image:`. Compose tags the result with that same image name, so IMAGE_REPO
+# and IMAGE_TAG still control what the containers run — they just name a local
+# image now rather than one in a registry. Set them to anything stable
+# (IMAGE_REPO=vivid, IMAGE_TAG=local) in /opt/vivid/.env.
+#
+# Requires the repository on the instance: the contexts below are relative to
+# THIS file, so deploy/ must sit inside a full checkout. That is the trade —
+# no registry to authenticate against, but the box needs the source and the
+# CPU and RAM to compile.
+#
+# Cost to know about: vivid-tools is Playwright and its image is ~2GB. On a VPS
+# that is already running other services, that build is the thing most likely
+# to exhaust memory. Build it once with the stack down if the box is tight.
+
+services:
+  backend:
+    build:
+      context: ../vivid-backend
+
+  # Same image as the backend by design — the worker is the same code with a
+  # different command, so it must not be built separately or the two could
+  # drift within a single deploy.
+  worker:
+    build:
+      context: ../vivid-backend
+
+  sandbox:
+    build:
+      context: ../sandbox
+
+  vivid-tools:
+    build:
+      context: ../vivid-tools
