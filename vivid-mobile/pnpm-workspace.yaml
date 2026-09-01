@@ -5,7 +5,9 @@ allowBuilds:
   bufferutil: false
   utf-8-validate: false
   unrs-resolver: false
-  highlight.js: set this to true or false
+  # Its postinstall only prints a deprecation notice, so it is declined
+  # like the others rather than left undecided.
+  highlight.js: false
 # `expo install` pins the SDK's own patch releases, which are often hours old.
 # The release-age policy stays on for everything else.
 minimumReleaseAgeExclude:

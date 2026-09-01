@@ -14,7 +14,9 @@
       "bundleIdentifier": "app.vivid.mobile",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Vivid listens when you dictate a message or start a voice call.",
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -25,7 +27,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["android.permission.RECORD_AUDIO"],
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -74,6 +81,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "59fbad74-d6c4-44bc-a110-b5f9d82ed926"
+      }
+    },
+    "owner": "timmy122"
   }
 }
