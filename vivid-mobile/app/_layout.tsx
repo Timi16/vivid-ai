@@ -118,6 +118,12 @@ function RootNavigator() {
           gestureEnabled: false,
         }}
       >
+        {/* Outside the gate on purpose: `vivid://auth` is Decane's registered
+            callback, so it arrives while still signed out, and on a cold start
+            it is the only thing carrying the token. Guarding it would send the
+            token to whichever shell the guard picked instead of to the screen
+            that knows how to spend it. */}
+        <Stack.Screen name="auth" />
         {/* The guard is the auth gate: no token, no app. Signing out flips
             it and the router swaps the shell for the auth screens. */}
         <Stack.Protected guard={signedIn}>

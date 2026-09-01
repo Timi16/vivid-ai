@@ -1,12 +1,16 @@
-// Regenerates the brand assets in assets/: splash (bot beside the wordmark),
-// the iOS icon, the Android adaptive icon layers and the favicon.
+// Regenerates the brand assets in assets/: splash (the mark beside the
+// wordmark), the iOS icon, the Android adaptive icon layers and the favicon.
 //
 //   pnpm brand
 //
 // Draws everything as SVG, then rasterises with headless Chrome, the one SVG
-// renderer a stock Mac has. The bot is drawn on the same 24-unit grid and
-// 1.7 stroke as components/ui/icons.tsx so it reads as part of the icon set.
-// Monochrome on purpose: the brand is silver on black, no colour.
+// renderer a stock Mac has. Monochrome on purpose: the brand is silver on
+// black, no colour.
+//
+// The glyph is the V, copied from vivid-frontend/app/icon.svg so the launcher
+// icon, the web favicon and the editor all carry the same mark. It replaces a
+// generic robot that had been standing in here: the robot was nobody's logo,
+// and it was what actually showed up on the home screen.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -31,21 +35,20 @@ const font = `<style>
 </style>`;
 const FONT = `GeistBrand, -apple-system, "Helvetica Neue", Arial, sans-serif`;
 
-function bot({ x, y, size, mono = false }) {
-  const s = size / 24;
-  const line = "#ffffff";
-  const head = mono ? line : "rgba(255,255,255,0.08)";
-  const face = mono ? "#000000" : line;
+// The V, on the 32-unit grid it is authored on in vivid-frontend/app/icon.svg.
+// `width` is the width of the glyph itself rather than of its box: the path
+// spans 15 of those 32 units, and sizing by the ink is what makes the mark
+// look the same weight across canvases. It is symmetric about the centre of
+// the box in both axes, so centring the box centres the glyph.
+const GLYPH_SPAN = 15 / 32;
+
+function mark({ cx, cy, width, color = "#e8e8ea" }) {
+  const box = width / GLYPH_SPAN;
+  const s = box / 32;
   return `
-  <g transform="translate(${x} ${y}) scale(${s})" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="4" y="7" width="16" height="13" rx="4.2" fill="${head}" stroke="${line}" stroke-width="1.7"/>
-    <path d="M12 7V4.4" stroke="${line}" stroke-width="1.7"/>
-    <circle cx="12" cy="3.2" r="1.25" fill="${line}"/>
-    <rect x="1.6" y="11" width="1.7" height="4.4" rx="0.85" fill="${line}"/>
-    <rect x="20.7" y="11" width="1.7" height="4.4" rx="0.85" fill="${line}"/>
-    <rect x="8" y="11.2" width="2.5" height="3.4" rx="1.25" fill="${face}"/>
-    <rect x="13.5" y="11.2" width="2.5" height="3.4" rx="1.25" fill="${face}"/>
-    <path d="M9.6 17.1h4.8" stroke="${face}" stroke-opacity="${mono ? 1 : 0.45}" stroke-width="1.5"/>
+  <g transform="translate(${cx - box / 2} ${cy - box / 2}) scale(${s})">
+    <path d="M8.5 9.5 16 22.5 23.5 9.5" fill="none" stroke="${color}"
+      stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
   </g>`;
 }
 
@@ -74,7 +77,7 @@ const files = {
       1600,
       600,
       `
-    ${bot({ x: 150, y: 90, size: 420 })}
+    ${mark({ cx: 360, cy: 300, width: 300 })}
     <text x="640" y="392" font-family='${FONT}' font-weight="700" font-size="300" letter-spacing="-8" fill="#ffffff">Vivid</text>
     <text x="1355" y="392" font-family='${FONT}' font-weight="500" font-size="150" letter-spacing="-2" fill="#ffffff" fill-opacity="0.45">AI</text>`
     ),
@@ -82,14 +85,22 @@ const files = {
   "icon.png": [
     1024,
     1024,
-    svg(1024, 1024, `${ambient(1024, 1024)}${bot({ x: 172, y: 172, size: 680 })}`),
+    svg(1024, 1024, `${ambient(1024, 1024)}${mark({ cx: 512, cy: 512, width: 540 })}`),
   ],
-  // Android adaptive layers: the bot inside the 66% safe zone.
-  "android-icon-foreground.png": [1024, 1024, svg(1024, 1024, bot({ x: 272, y: 272, size: 480 }))],
+  // Android adaptive layers. The launcher masks these to a shape and can
+  // parallax them, so the glyph stays inside the inner 66% safe zone: 540 of
+  // 1024 is comfortably within the 676 that always survives the crop.
+  "android-icon-foreground.png": [
+    1024,
+    1024,
+    svg(1024, 1024, mark({ cx: 512, cy: 512, width: 460 })),
+  ],
+  // The monochrome layer is a stencil: themed icons keep only its alpha and
+  // repaint it, so it is drawn flat white rather than in the brand silver.
   "android-icon-monochrome.png": [
     1024,
     1024,
-    svg(1024, 1024, bot({ x: 272, y: 272, size: 480, mono: true })),
+    svg(1024, 1024, mark({ cx: 512, cy: 512, width: 460, color: "#ffffff" })),
   ],
   "android-icon-background.png": [1024, 1024, svg(1024, 1024, ambient(1024, 1024))],
   "favicon.png": [
@@ -98,7 +109,7 @@ const files = {
     svg(
       96,
       96,
-      `<rect width="96" height="96" rx="20" fill="#000000"/>${bot({ x: 12, y: 12, size: 72 })}`
+      `<rect width="96" height="96" rx="20" fill="#000000"/>${mark({ cx: 48, cy: 48, width: 48 })}`
     ),
   ],
 };
