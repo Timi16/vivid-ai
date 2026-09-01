@@ -5,6 +5,7 @@
 // that the mic streamer is a hook here because the native recorder is one.
 
 import { useQueryClient } from "@tanstack/react-query";
+import { usePathname } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -44,6 +45,13 @@ export function useLiveThread(
 ) {
   const queryClient = useQueryClient();
   const streamer = usePcmStreamer();
+  // The drawer keeps a thread mounted after you navigate away, so this hook
+  // outlives the screen being on top. Whether you are actually looking at the
+  // thread decides whether what happens in it is news. Read through a ref: the
+  // event handler is installed once and must not go stale.
+  const pathname = usePathname();
+  const watchingRef = useRef(false);
+  watchingRef.current = pathname === `/thread/${chatId}`;
   const [live, setLive] = useState<LiveMessage[]>([]);
   const [stream, setStream] = useState("");
   const [activity, setActivity] = useState<string[]>([]);
@@ -195,19 +203,24 @@ export function useLiveThread(
             });
           }
           if (event.message_id && event.text) {
-            pushActivity({
-              kind: "reply",
-              title: "Reply ready",
-              detail: (event.text ?? "").slice(0, 90),
-              chatId: chatRef.current,
-            });
-            for (const file of event.attachments ?? []) {
+            // Same rule as a failure: a reply you watched arrive is not news.
+            // Announcing it to someone already reading it is what made the
+            // bell carry an unread badge for every single turn.
+            if (!watchingRef.current) {
               pushActivity({
-                kind: "file",
-                title: `Created ${file.filename ?? "a file"}`,
-                detail: file.mime,
+                kind: "reply",
+                title: "Reply ready",
+                detail: (event.text ?? "").slice(0, 90),
                 chatId: chatRef.current,
               });
+              for (const file of event.attachments ?? []) {
+                pushActivity({
+                  kind: "file",
+                  title: `Created ${file.filename ?? "a file"}`,
+                  detail: file.mime,
+                  chatId: chatRef.current,
+                });
+              }
             }
             setLive((prev) => [
               ...prev,
@@ -249,12 +262,20 @@ export function useLiveThread(
           const message = chatErrorMessage(event);
           setError(message);
           toast(message);
-          pushActivity({
-            kind: "error",
-            title: "Something failed",
-            detail: message.slice(0, 90),
-            chatId: chatRef.current,
-          });
+          // A failure you watched happen does not need a notification about
+          // it: the thread already shows it in place and the toast has said
+          // it out loud. Badging the bell for the same event makes the app
+          // look like something else went wrong somewhere you have not been,
+          // and leaves an unread marker to go and clear. The feed is for what
+          // happened while you were looking elsewhere -- so only then.
+          if (!watchingRef.current) {
+            pushActivity({
+              kind: "error",
+              title: "Something failed",
+              detail: message.slice(0, 90),
+              chatId: chatRef.current,
+            });
+          }
           if (voiceModeRef.current === "call" && callOpenRef.current) {
             // Without a connection, re-opening the mic would just loop.
             if (lostConnection) endCall();
