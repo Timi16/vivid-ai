@@ -288,7 +288,7 @@
 	border: none;
 	background: transparent;
 	box-shadow: none;
-	background-image: url('../../../../browser/media/code-icon.svg');
+	background-image: url('../../../../browser/media/vivid-icon.svg');
 	background-repeat: no-repeat;
 	background-position: center center;
 	background-size: 148px;
@@ -512,6 +512,21 @@
 	background-size: contain;
 	align-items: center;
 	justify-content: center;
+}
+
+/* The Vivid mark inherits the button's text colour rather than shipping a
+   coloured asset, so it stays legible on the emphasized button in both themes. */
+.onboarding-a-provider-mark.vivid {
+	background-image: none;
+}
+
+.onboarding-a-provider-mark.vivid::before {
+	content: '';
+	width: 18px;
+	height: 18px;
+	background-color: currentColor;
+	-webkit-mask: url('../../../../browser/media/vivid-mark.svg') center / contain no-repeat;
+	mask: url('../../../../browser/media/vivid-mark.svg') center / contain no-repeat;
 }
 
 .onboarding-a-provider-mark.github {

@@ -16,6 +16,7 @@ import {
   PlusIcon,
   SearchIcon,
   TrashIcon,
+  VividLogo,
   type IconComponent,
 } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
@@ -73,10 +74,16 @@ export function DrawerContent({ state, navigation }: DrawerContentComponentProps
       }}
     >
       <View style={{ height: 56, justifyContent: "center", paddingHorizontal: 20 }}>
-        <Pressable accessibilityRole="link" onPress={() => go("/")}>
-          <AppText display size={17}>
-            Vivid
-          </AppText>
+        {/* The mark rather than the word. It still has to announce itself to a
+            screen reader, which the text was doing implicitly. */}
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Vivid"
+          onPress={() => go("/")}
+          hitSlop={8}
+          style={{ alignSelf: "flex-start" }}
+        >
+          <VividLogo size={26} />
         </Pressable>
       </View>
 

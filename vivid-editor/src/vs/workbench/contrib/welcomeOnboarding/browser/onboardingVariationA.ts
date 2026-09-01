@@ -42,7 +42,6 @@ import {
 	IOnboardingThemeOption,
 	getOnboardingStepTitle,
 	getOnboardingStepSubtitle,
-	GHE_FULL_URI_REGEX,
 	GheParseResultKind,
 	parseGheInstanceInput,
 } from '../common/onboardingTypes.js';
@@ -496,10 +495,19 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		const content = append(wrapper, $('.onboarding-a-signin-content'));
 		const contentMain = append(content, $('.onboarding-a-signin-content-main'));
 		const title = append(contentMain, $('h2.onboarding-a-signin-title'));
-		title.textContent = localize('onboarding.signIn.heroTitle', "Welcome to VS Code");
+		// Both names come from product.json rather than the string, so a rebrand
+		// is one config edit and the first screen can never name a product this
+		// build is not. `nameShort` + "Code" is the agent, as the extension and
+		// the CLI are both named.
+		title.textContent = localize('onboarding.signIn.heroTitle', "Welcome to {0}", product.nameLong);
 
 		const subtitle = append(contentMain, $('p.onboarding-a-signin-subtitle'));
-		subtitle.textContent = localize('onboarding.signIn.heroSubtitle', "Sign in to use GitHub Copilot.");
+		subtitle.textContent = localize(
+			'onboarding.signIn.heroSubtitle',
+			"Sign in to {0} to use {1} Code.",
+			defaultChat.provider.default.name,
+			product.nameShort,
+		);
 
 		const actions = append(contentMain, $('.onboarding-a-signin-actions'));
 
@@ -534,7 +542,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		this._createInlineLink(copilotDisclaimer, localize('onboarding.signIn.disclaimer.terms', "Terms"), defaultChat.termsStatementUrl);
 		copilotDisclaimer.append(localize('onboarding.signIn.disclaimer.middle', " and "));
 		this._createInlineLink(copilotDisclaimer, localize('onboarding.signIn.disclaimer.privacy', "Privacy Statement"), defaultChat.privacyStatementUrl);
-		copilotDisclaimer.append(localize('onboarding.signIn.disclaimer.copilotPrefix', ". {0} Copilot may show ", defaultChat.provider.default.name));
+		copilotDisclaimer.append(localize('onboarding.signIn.disclaimer.copilotPrefix', ". {0} may show ", defaultChat.provider.default.name));
 		this._createInlineLink(copilotDisclaimer, localize('onboarding.signIn.disclaimer.publicCode', "public code"), defaultChat.publicCodeMatchesUrl);
 		copilotDisclaimer.append(localize('onboarding.signIn.disclaimer.improveSuffix', " suggestions and use your data to improve the product."));
 		copilotDisclaimer.append(' ');
@@ -544,40 +552,23 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	private _renderDefaultSignInActions(actions: HTMLElement): void {
-		const githubBtn = this._registerStepFocusable(this._createSignInButton(actions, 'github', localize('onboarding.signIn.github', "Continue with GitHub"), {
+		// One account, so one button. Upstream offers GitHub, Google, Apple and
+		// GitHub Enterprise side by side; every one of those slots in this
+		// product.json points at the same Vivid provider, so rendering four
+		// buttons wearing other companies' marks offered a choice that does not
+		// exist and named vendors nobody is signing in to.
+		//
+		// Google is not missing from this list: Decane brokers a Google account
+		// into a Vivid one, so it is reached *through* this button rather than
+		// beside it.
+		const label = localize('onboarding.signIn.provider', "Continue with {0}", defaultChat.provider.default.name);
+		const signInBtn = this._registerStepFocusable(this._createSignInButton(actions, 'vivid', label, {
 			emphasized: true,
-			label: localize('onboarding.signIn.github.aria', "Continue with GitHub")
+			label,
 		}));
-		this.stepDisposables.add(addDisposableListener(githubBtn, EventType.CLICK, () => {
-			this._logAction('signIn', undefined, 'github');
+		this.stepDisposables.add(addDisposableListener(signInBtn, EventType.CLICK, () => {
+			this._logAction('signIn', undefined, 'vivid');
 			this._handleSignIn();
-		}));
-
-		const googleBtn = this._registerStepFocusable(this._createSignInButton(actions, 'google', localize('onboarding.signIn.google', "Continue with Google"), {
-			iconOnly: true,
-			label: localize('onboarding.signIn.google', "Continue with Google")
-		}));
-		this.stepDisposables.add(addDisposableListener(googleBtn, EventType.CLICK, () => {
-			this._logAction('signIn', undefined, 'google');
-			this._handleSignIn('google');
-		}));
-
-		const appleBtn = this._registerStepFocusable(this._createSignInButton(actions, 'apple', localize('onboarding.signIn.apple', "Continue with Apple"), {
-			iconOnly: true,
-			label: localize('onboarding.signIn.apple', "Continue with Apple")
-		}));
-		this.stepDisposables.add(addDisposableListener(appleBtn, EventType.CLICK, () => {
-			this._logAction('signIn', undefined, 'apple');
-			this._handleSignIn('apple');
-		}));
-
-		const gheBtn = this._registerStepFocusable(this._createSignInButton(actions, 'github-enterprise', localize('onboarding.signIn.ghe', "GHE"), {
-			textOnly: true,
-			label: localize('onboarding.signIn.ghe.aria', "Continue with GitHub Enterprise")
-		}));
-		this.stepDisposables.add(addDisposableListener(gheBtn, EventType.CLICK, () => {
-			this._logAction('signIn', undefined, 'github-enterprise');
-			void this._handleEnterpriseSignIn();
 		}));
 	}
 
@@ -693,7 +684,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		}
 	}
 
-	private _createSignInButton(parent: HTMLElement, providerClass: 'github' | 'github-enterprise' | 'google' | 'apple', label: string, options?: { emphasized?: boolean; iconOnly?: boolean; textOnly?: boolean; label?: string }): HTMLButtonElement {
+	private _createSignInButton(parent: HTMLElement, providerClass: 'vivid' | 'github' | 'github-enterprise' | 'google' | 'apple', label: string, options?: { emphasized?: boolean; iconOnly?: boolean; textOnly?: boolean; label?: string }): HTMLButtonElement {
 		const isCompact = options?.iconOnly || options?.textOnly;
 		const btn = append(parent, $<HTMLButtonElement>(isCompact ? 'button.onboarding-a-signin-icon-btn' : 'button.onboarding-a-signin-btn'));
 		btn.type = 'button';
@@ -752,18 +743,12 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		}
 	}
 
-	private async _handleEnterpriseSignIn(): Promise<void> {
-		const existingUri = this.configurationService.getValue<string>(defaultChat.providerUriSetting);
-		if (typeof existingUri !== 'string' || !GHE_FULL_URI_REGEX.test(existingUri)) {
-			this.enterpriseInstanceValue = existingUri ?? '';
-			this.enterpriseSignInWatch = StopWatch.create();
-			this._setEnterpriseSignInUiState('instance');
-			return;
-		}
-
-		this.enterpriseInstanceValue = existingUri;
-		await this._runEnterpriseSignInSetup();
-	}
+	// The GitHub Enterprise entry point was the "GHE" button beside the provider
+	// buttons, and it went with them: this product has one account. The
+	// enterprise instance form and progress states below are left in place --
+	// they are reached from `enterpriseSignInUiState`, which nothing sets any
+	// more -- so that restoring the button is a one-line change rather than a
+	// reconstruction, and so the next upstream merge conflicts here visibly.
 
 	private async _submitEnterpriseInstance(resolvedUri: string): Promise<void> {
 		try {
