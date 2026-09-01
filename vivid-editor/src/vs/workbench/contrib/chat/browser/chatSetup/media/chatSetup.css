@@ -59,3 +59,17 @@
 .chat-setup-dialog .dialog-buttons-row > .dialog-buttons > .monaco-button.continue-button.apple::before {
 	background-image: url('./apple-dark.svg');
 }
+
+/* The dialog's icon is a codicon class on #monaco-dialog-icon, and the default
+   is Copilot's mascot. Masking the element with the product mark replaces the
+   glyph without needing a Vivid entry in the icon font, and `currentColor`
+   keeps it legible in every theme. */
+.chat-setup-dialog .dialog-icon.codicon::before {
+	content: '';
+	display: block;
+	width: 72px;
+	height: 72px;
+	background-color: currentColor;
+	-webkit-mask: url('../../../../../browser/media/vivid-mark.svg') center / contain no-repeat;
+	mask: url('../../../../../browser/media/vivid-mark.svg') center / contain no-repeat;
+}

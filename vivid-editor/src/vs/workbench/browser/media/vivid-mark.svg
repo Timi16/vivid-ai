@@ -1,6 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-	<!-- Glyph-only Vivid mark, no ground. Used as a CSS mask so the button's own
-	     text colour shows through; the stroke colour here is irrelevant. -->
-	<path d="m9 6-6 6 6 6"/>
-	<path d="m15 6 6 6-6 6"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+	<!-- The V alone, no ground. Used as a CSS mask so the button's own text
+	     colour shows through; the stroke colour here is irrelevant. -->
+	<path d="M8.5 9.5 16 22.5 23.5 9.5" fill="none" stroke="#000" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

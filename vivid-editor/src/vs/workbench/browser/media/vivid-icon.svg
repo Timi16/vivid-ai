@@ -1,9 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Vivid">
-	<!-- Vivid's mark: the code brackets on the brand's dark ground. Monochrome
-	     on purpose - the palette is silver on near-black, no accent colour. -->
-	<rect width="128" height="128" rx="28" fill="#0a0a0a"/>
-	<g fill="none" stroke="#e8e8ea" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
-		<path d="M53 40 29 64l24 24"/>
-		<path d="M75 40l24 24-24 24"/>
-	</g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Vivid">
+	<!-- The product mark, same geometry as vivid-frontend/app/icon.svg and the
+	     app icon in resources/: a silver V on the brand's near-black ground. -->
+	<rect width="32" height="32" rx="7" fill="#0a0a0a"/>
+	<path d="M8.5 9.5 16 22.5 23.5 9.5" fill="none" stroke="#e8e8ea" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

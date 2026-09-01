@@ -844,22 +844,16 @@ export function RefreshIcon({ size, color }: IconProps) {
   );
 }
 
-// The Vivid mark: the code brackets, drawn at the same stroke weight as the
-// rest of the set so it sits correctly beside them. Used where the product
-// signs its own surface, in place of spelling the name out.
+// The Vivid mark: the V, matching the app icon and vivid-frontend/app/icon.svg.
+// Path scaled from that file's 32-unit viewBox to the 24-unit frame the rest of
+// the set uses. Used where the product signs its own surface, in place of
+// spelling the name out.
 export function VividLogo({ size, color }: IconProps) {
   const stroke = useStroke(color);
   return (
     <Frame size={size}>
       <Path
-        d="m9 6-6 6 6 6"
-        stroke={stroke}
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="m15 6 6 6-6 6"
+        d="M6.4 7.1 12 16.9l5.6-9.8"
         stroke={stroke}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
