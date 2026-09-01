@@ -11,6 +11,11 @@ set -euo pipefail
 
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/vivid}"
 COMPOSE_FILE="docker-compose.prod.yml"
+# BUILD=1 compiles the images here instead of pulling them from a registry.
+# Needs the repository checked out (the build contexts are relative to the
+# compose files), and enough CPU and RAM on a box that is also serving.
+BUILD="${BUILD:-0}"
+BUILD_FILE="docker-compose.build.yml"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8000/v1/health}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-45}"   # x2s = 90s, enough for init_db on a cold DB
 HEALTH_DELAY=2
@@ -30,7 +35,15 @@ if [ ! -f app.env ]; then
     exit 1
 fi
 
-compose() { docker compose -f "$COMPOSE_FILE" "$@"; }
+if [ "$BUILD" = "1" ]; then
+    if [ ! -f "$BUILD_FILE" ]; then
+        echo "FATAL: BUILD=1 but $DEPLOY_DIR/$BUILD_FILE is missing." >&2
+        exit 1
+    fi
+    compose() { docker compose -f "$COMPOSE_FILE" -f "$BUILD_FILE" "$@"; }
+else
+    compose() { docker compose -f "$COMPOSE_FILE" "$@"; }
+fi
 
 wait_for_health() {
     local i
@@ -47,7 +60,13 @@ PREV_TAG="$(cat .image_tag 2>/dev/null || true)"
 echo "==> deploying $NEW_TAG (previous: ${PREV_TAG:-none})"
 
 export IMAGE_TAG="$NEW_TAG"
-compose pull
+if [ "$BUILD" = "1" ]; then
+    # Build first and separately: a failure here must not leave half the stack
+    # restarted on a mix of old and new images.
+    compose build
+else
+    compose pull
+fi
 compose up -d --remove-orphans
 
 if wait_for_health; then
@@ -70,6 +89,9 @@ fi
 
 echo "==> rolling back to $PREV_TAG" >&2
 export IMAGE_TAG="$PREV_TAG"
+# Deliberately no rebuild: the previous tag's image is already on disk, and
+# rebuilding would compile the CURRENT working tree under the OLD tag, which
+# is not a rollback. If that image has been pruned, this cannot recover.
 compose up -d --remove-orphans
 if wait_for_health; then
     echo "==> rolled back to $PREV_TAG; the deploy is still a failure" >&2

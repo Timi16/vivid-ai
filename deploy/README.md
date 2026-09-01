@@ -175,6 +175,62 @@ free -h && docker stats --no-stream
 If it is tight, the honest fix is a second box for the model-adjacent
 services rather than shaving Playwright's pool down until browsing breaks.
 
+## Building on the instance instead of pulling
+
+Registry-free option: no GHCR auth, no tags to get wrong, no pipeline needed.
+The cost is that the box needs the source and the CPU and RAM to compile while
+it is also serving.
+
+Requires a full checkout on the instance rather than just the compose files,
+because the build contexts are relative to `deploy/`:
+
+```bash
+sudo mkdir -p /opt/vivid && sudo chown "$USER:$USER" /opt/vivid
+git clone https://github.com/Worldstreet-Web-Services/vivid-ai /opt/vivid/src
+cd /opt/vivid/src/deploy
+```
+
+Put `.env` and `app.env` beside the compose files, and set the image name to
+anything stable — it names a local image now, not a registry one:
+
+```
+IMAGE_REPO=vivid
+IMAGE_TAG=local
+```
+
+Then:
+
+```bash
+BUILD=1 DEPLOY_DIR=/opt/vivid/src/deploy ./deploy.sh local
+```
+
+or directly:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.build.yml up -d --build
+```
+
+`docker-compose.build.yml` only adds a `build:` section to the four services
+that already declare `image:`, so Compose tags what it builds with that same
+name and nothing else in the setup changes.
+
+### What you give up
+
+- **Rollback stops working properly.** Tags are the rollback mechanism, and a
+  rebuild produces whatever the working tree holds now. `deploy.sh` will not
+  rebuild on the rollback path for exactly this reason — it restarts the
+  previous image if it is still on disk, and cannot recover if it was pruned.
+  Rolling back becomes `git checkout <sha> && BUILD=1 ./deploy.sh <sha>`.
+- **Builds compete with serving.** `vivid-tools` is Playwright and its image is
+  ~2GB. On a box already running other services, that build is the likeliest
+  thing to exhaust memory. Build it once with the stack down if RAM is tight.
+- **No tested artifact.** Pulling a tag means deploying the exact image CI
+  tested. Building on the box means the box is the only place it has ever been
+  compiled.
+
+Reasonable while there is no pipeline. Worth moving back to pull-based once
+`.github/workflows/vivid-backend.yml` is restored on `main`.
+
 ## Rollback
 
 Tags are commit SHAs. Actions → vivid-backend → Run workflow, and give the SHA
