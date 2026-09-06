@@ -1,4 +1,5 @@
-"""Adapter for the coding model (Devstral on RunPod, vLLM, OpenAI-compatible).
+"""Adapter for the coding model (Devstral: on our pod, or on OpenRouter when
+the pod is down — provider.py decides).
 
 Separate from llm.py on purpose: that one serves the Gemma assistant and knows
 nothing about tools. This one is the opposite — its whole job is NATIVE tool
@@ -6,10 +7,12 @@ calling, which is why the coding agent exists at all. The chat agent recovers
 the model's intent by regex-scraping JSON out of prose (services/agent.py);
 over a fifty-step coding loop that fails often enough to be useless.
 
-Requires vLLM to have been started with:
+When the pod serves it, vLLM must have been started with:
     --enable-auto-tool-choice --tool-call-parser mistral
 Without those, vLLM ignores `tools` and answers in prose. probe_tool_support()
-detects that at startup rather than leaving it to fail mid-session.
+detects that at startup rather than leaving it to fail mid-session. OpenRouter
+needs no flags, but the probe still tells you whether the chosen model calls
+tools at all.
 """
 import asyncio
 import json
@@ -18,7 +21,7 @@ import logging
 import httpx
 
 from app.core.config import settings
-from app.services.models_gateway import http
+from app.services.models_gateway import http, provider
 
 log = logging.getLogger("vivid.code_llm")
 
@@ -30,6 +33,7 @@ class CodeLLMUnavailable(Exception):
 _TRANSIENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.RemoteProtocolError,
               httpx.ReadTimeout, httpx.ReadError)
 _RETRY_DELAY = 0.5
+_VLLM_FLAGS = "--enable-auto-tool-choice --tool-call-parser mistral"
 
 
 def _describe(e: Exception) -> str:
@@ -38,15 +42,55 @@ def _describe(e: Exception) -> str:
     return str(e) or e.__class__.__name__
 
 
-def _base() -> str:
-    url = settings.CODE_LLM_BASE_URL or settings.LLM_BASE_URL
-    if not url:
-        raise CodeLLMUnavailable("CODE_LLM_BASE_URL is not configured")
-    return url.rstrip("/")
+def _endpoint() -> provider.Endpoint:
+    ep = provider.endpoint(provider.CODE)
+    if not ep.configured:
+        raise CodeLLMUnavailable(ep.missing)
+    return ep
 
 
 def configured() -> bool:
-    return bool(settings.CODE_LLM_BASE_URL or settings.LLM_BASE_URL)
+    return provider.endpoint(provider.CODE).configured
+
+
+def missing() -> str | None:
+    """Why the coder cannot be served, naming the env var to set."""
+    return provider.endpoint(provider.CODE).missing
+
+
+def model_name() -> str:
+    """The vendor id currently serving the coder, for the `ready` frame."""
+    return provider.endpoint(provider.CODE).model
+
+
+def context_tokens() -> int:
+    """The window the live coding model serves, as advertised on /v1/models."""
+    return provider.endpoint(provider.CODE).context_tokens
+
+
+def loop_budget_tokens() -> int:
+    """What the agent loop may fill before old tool results are blanked.
+
+    CODE_CONTEXT_TOKENS is the loop's own ceiling, chosen to sit under the
+    pod's window. It is kept as the ceiling on OpenRouter too — a longer
+    window is not a reason to carry more stale tool output — but if the live
+    model's window is the smaller number, that wins, with a tenth held back
+    for the reply and the estimator's error.
+    """
+    window = context_tokens()
+    if not window:
+        return settings.CODE_CONTEXT_TOKENS
+    return min(settings.CODE_CONTEXT_TOKENS, int(window * 0.9))
+
+
+def _stream_error(chunk: dict) -> str | None:
+    """See llm._stream_error: OpenRouter can fail mid-stream with a 200."""
+    error = chunk.get("error")
+    if isinstance(error, dict):
+        return str(error.get("message") or error)
+    if isinstance(error, str) and error:
+        return error
+    return None
 
 
 async def stream_chat(messages: list[dict], tools: list[dict],
@@ -57,12 +101,13 @@ async def stream_chat(messages: list[dict], tools: list[dict],
         {"type": "done", "finish_reason": str, "usage": dict | None}
 
     Each call is {"id", "name", "arguments"} with arguments already parsed.
-    vLLM streams tool calls as fragments keyed by `index` — name arrives on the
+    Tool calls stream as fragments keyed by `index` — name arrives on the
     first fragment, the JSON arguments dribble in across later ones — so they
     are reassembled here and emitted only when the turn is complete.
     """
+    ep = _endpoint()
     payload = {
-        "model": settings.CODE_LLM_MODEL,
+        "model": ep.model,
         "messages": messages,
         "tools": tools,
         "tool_choice": "auto",
@@ -71,6 +116,7 @@ async def stream_chat(messages: list[dict], tools: list[dict],
         "top_p": settings.CODE_LLM_TOP_P,
         "stream": True,
         "stream_options": {"include_usage": True},
+        **ep.extra_payload,
     }
 
     partial: dict[int, dict] = {}
@@ -81,7 +127,7 @@ async def stream_chat(messages: list[dict], tools: list[dict],
     for attempt in (1, 2):
         try:
             async with http.client().stream(
-                    "POST", f"{_base()}/chat/completions", json=payload,
+                    "POST", ep.url(), json=payload, headers=ep.headers,
                     timeout=settings.CODE_LLM_TIMEOUT) as r:
                 if r.status_code >= 400:
                     body = (await r.aread()).decode(errors="replace")[:600]
@@ -94,6 +140,9 @@ async def stream_chat(messages: list[dict], tools: list[dict],
                     if data == "[DONE]":
                         break
                     chunk = json.loads(data)
+                    if (problem := _stream_error(chunk)):
+                        raise CodeLLMUnavailable(
+                            f"coding model stream failed: {problem}")
                     if chunk.get("usage"):
                         usage = chunk["usage"]
                     choices = chunk.get("choices") or []
@@ -111,9 +160,9 @@ async def stream_chat(messages: list[dict], tools: list[dict],
 
                     for frag in delta.get("tool_calls") or []:
                         yielded = True
-                        idx = frag.get("index", 0)
                         slot = partial.setdefault(
-                            idx, {"id": None, "name": None, "arguments": ""})
+                            _slot_index(frag, partial),
+                            {"id": None, "name": None, "arguments": ""})
                         if frag.get("id"):
                             slot["id"] = frag["id"]
                         fn = frag.get("function") or {}
@@ -134,6 +183,21 @@ async def stream_chat(messages: list[dict], tools: list[dict],
     if partial:
         yield {"type": "tool_calls", "calls": _finalize(partial)}
     yield {"type": "done", "finish_reason": finish_reason, "usage": usage}
+
+
+def _slot_index(frag: dict, partial: dict[int, dict]) -> int:
+    """Which call a fragment belongs to. vLLM always numbers fragments; some
+    providers behind OpenRouter send each call whole and unnumbered, and
+    piling those into slot 0 would merge two calls into one broken one. An
+    unnumbered fragment joins the slot with its id, else opens a new one."""
+    if frag.get("index") is not None:
+        return int(frag["index"])
+    call_id = frag.get("id")
+    if call_id:
+        for idx, slot in partial.items():
+            if slot["id"] == call_id:
+                return idx
+    return max(partial, default=-1) + 1
 
 
 def _finalize(partial: dict[int, dict]) -> list[dict]:
@@ -163,12 +227,17 @@ def _finalize(partial: dict[int, dict]) -> list[dict]:
 
 
 async def probe_tool_support() -> dict:
-    """Is the served model reachable AND was vLLM started with tool calling on?
+    """Is the served model reachable AND does it actually call tools?
 
     Sends a one-shot request with a trivial tool the model has no choice but to
-    use. A 400 means the flags are missing; prose back means the same thing in
-    a friendlier disguise.
+    use. On a pod, a 400 means the vLLM flags are missing; prose back means the
+    same thing in a friendlier disguise. On OpenRouter, prose back means the
+    chosen OPENROUTER_CODE_MODEL is not a tool-calling model.
     """
+    ep = provider.endpoint(provider.CODE)
+    if not ep.configured:
+        return {"ok": False, "tool_calling": False, "provider": ep.provider,
+                "detail": ep.missing}
     probe_tool = [{
         "type": "function",
         "function": {
@@ -181,38 +250,40 @@ async def probe_tool_support() -> dict:
             },
         },
     }]
+    base = {"provider": ep.provider, "model": ep.model}
     try:
         r = await http.client().post(
-            f"{_base()}/chat/completions",
+            ep.url(),
             json={
-                "model": settings.CODE_LLM_MODEL,
+                "model": ep.model,
                 "messages": [{"role": "user",
                               "content": "Call report_ready with ok=true."}],
                 "tools": probe_tool,
                 "tool_choice": "auto",
                 "max_tokens": 64,
                 "temperature": 0,
+                **ep.extra_payload,
             },
+            headers=ep.headers,
             timeout=60)
     except httpx.HTTPError as e:
-        return {"ok": False, "tool_calling": False, "detail": str(e)}
+        return {**base, "ok": False, "tool_calling": False, "detail": _describe(e)}
 
     if r.status_code >= 400:
         body = r.text[:300]
         hint = ""
-        if "tool" in body.lower():
-            hint = ("start vLLM with --enable-auto-tool-choice "
-                    "--tool-call-parser mistral")
-        return {"ok": False, "tool_calling": False,
+        if ep.is_pod and "tool" in body.lower():
+            hint = f"start vLLM with {_VLLM_FLAGS}"
+        return {**base, "ok": False, "tool_calling": False,
                 "detail": f"HTTP {r.status_code}: {body}", "hint": hint}
 
     msg = (r.json().get("choices") or [{}])[0].get("message") or {}
     if msg.get("tool_calls"):
-        return {"ok": True, "tool_calling": True,
-                "model": settings.CODE_LLM_MODEL}
+        return {**base, "ok": True, "tool_calling": True}
     return {
-        "ok": True, "tool_calling": False,
+        **base, "ok": True, "tool_calling": False,
         "detail": "model answered in prose instead of calling the tool",
-        "hint": ("vLLM is serving but tool calling is off — restart with "
-                 "--enable-auto-tool-choice --tool-call-parser mistral"),
+        "hint": (f"vLLM is serving but tool calling is off — restart with "
+                 f"{_VLLM_FLAGS}" if ep.is_pod
+                 else "pick an OPENROUTER_CODE_MODEL that supports tools"),
     }

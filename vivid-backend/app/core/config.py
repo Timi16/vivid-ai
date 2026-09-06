@@ -1,4 +1,9 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Where chat completions may be sent. "runpod" is our own vLLM pods;
+#: "openrouter" is the hosted fallback for the hours a GPU is down.
+LLM_PROVIDERS = ("runpod", "openrouter")
 
 
 class Settings(BaseSettings):
@@ -39,6 +44,62 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET: str = "vivid"
     MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024
+
+    # --- Model provider switch ------------------------------------------
+    # The one knob to flip when the GPUs are down. "runpod" (default) sends
+    # every model call to our own pods below; "openrouter" sends the chat
+    # assistant, the coding agent, speech-to-text and text-to-speech to
+    # OpenRouter instead. Everything above services/models_gateway/provider.py
+    # — the chat pipeline, history and token budgets, the /v1 proxy and its
+    # `vivid-*` aliases, the frontend — is the same either way, so failing
+    # over is an env change and a restart, not a client release.
+    # Not moved: translation (MADLAD, on the ASR pod; yo/ig replies fall back
+    # to English when it is down, as they already do), embeddings, reranker.
+    MODEL_PROVIDER: str = "runpod"
+    # Per-service overrides for a partial outage: one pod can fail over while
+    # the rest stay home. Empty = follow MODEL_PROVIDER.
+    LLM_PROVIDER: str = ""       # the chat assistant
+    CODE_LLM_PROVIDER: str = ""  # the coding agent
+    ASR_PROVIDER: str = ""       # speech-to-text
+    TTS_PROVIDER: str = ""       # text-to-speech
+    OPENROUTER_API_KEY: str = ""  # required whenever a provider above says openrouter
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    # OpenRouter's ids for the same LLMs the pods serve, so a bare flip keeps
+    # the product's behaviour. Empty code model falls back to the chat one,
+    # mirroring CODE_LLM_BASE_URL -> LLM_BASE_URL below.
+    OPENROUTER_CHAT_MODEL: str = "google/gemma-3-27b-it"
+    OPENROUTER_CODE_MODEL: str = "mistralai/devstral-2512"
+    # The windows those models serve there. The backend clamps history to the
+    # live window and advertises it on /v1/models, so these must be real.
+    OPENROUTER_CHAT_CONTEXT_TOKENS: int = 131_072
+    OPENROUTER_CODE_CONTEXT_TOKENS: int = 262_144
+    # How OpenRouter picks among the hosts serving a model. Its default
+    # (price-weighted) landed the chat model on a host with 1-4s to first
+    # token; "latency" measured 0.7-1.3s on the same afternoon. A voice
+    # assistant wants the fast one. Empty = OpenRouter's default routing.
+    OPENROUTER_PROVIDER_SORT: str = "latency"  # "latency" | "throughput" | "price" | ""
+    # Voice on OpenRouter: /audio/transcriptions and /audio/speech. Neither
+    # has a Nigerian voice; this is degraded service, not parity. Pick from
+    # /models?output_modalities=transcription and =speech.
+    OPENROUTER_STT_MODEL: str = "openai/whisper-large-v3"
+    # Language codes forwarded to the transcriber as a hint. Anything else
+    # (Igbo and Pidgin, which Whisper does not know) is left to auto-detect —
+    # sending an unknown code is a 400, not a shrug.
+    OPENROUTER_STT_LANGUAGES: list[str] = ["en", "yo", "ha", "fr"]
+    OPENROUTER_TTS_MODEL: str = "hexgrad/kokoro-82m"
+    OPENROUTER_TTS_VOICE: str = "af_heart"
+    # OpenRouter returns raw 16-bit mono PCM; the clients play WAV, so the
+    # backend adds the header and needs the rate. 24 kHz is what kokoro, the
+    # OpenAI voices and MAI-Voice produce; change it with the model.
+    OPENROUTER_TTS_SAMPLE_RATE: int = 24_000
+    # OpenRouter refuses audio (transcription) requests unless the account
+    # holds at least this much credit, whatever the request would cost. It is
+    # their rule, not ours; /health/models reports `audio_ready` against it so
+    # an empty balance shows up before the first voice turn fails.
+    OPENROUTER_AUDIO_MIN_BALANCE: float = 0.50
+    # Attribution headers OpenRouter shows on its rankings. Optional.
+    OPENROUTER_SITE_URL: str = ""
+    OPENROUTER_APP_NAME: str = "Vivid AI"
 
     # Model services on RunPod. Nothing else in the codebase may know these.
     LLM_BASE_URL: str = ""    # OpenAI-compatible root incl. /v1, e.g. https://<pod>-8000.proxy.runpod.net/v1
@@ -159,6 +220,22 @@ class Settings(BaseSettings):
     DEFAULT_CLIENT_ID: str = "vivid_web"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @field_validator("MODEL_PROVIDER", "LLM_PROVIDER", "CODE_LLM_PROVIDER",
+                     "ASR_PROVIDER", "TTS_PROVIDER")
+    @classmethod
+    def _known_provider(cls, value: str, info) -> str:
+        """Refuse to boot on a misspelt provider. This switch gets flipped in
+        a hurry, at the moment a GPU dies; a typo must fail at startup, not
+        on the first chat turn after the restart."""
+        value = value.strip().lower()
+        if value == "" and info.field_name != "MODEL_PROVIDER":
+            return value  # an override left empty follows the master switch
+        if value not in LLM_PROVIDERS:
+            raise ValueError(
+                f"{info.field_name} must be one of {', '.join(LLM_PROVIDERS)}, "
+                f"not {value!r}")
+        return value
 
 
 settings = Settings()

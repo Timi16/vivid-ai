@@ -61,11 +61,11 @@ async def code_endpoint(ws: WebSocket):
         return
     if not code_llm.configured():
         await ws.send_json({"type": "error", "code": "not_configured",
-                            "message": "CODE_LLM_BASE_URL is not set"})
+                            "message": code_llm.missing()})
         await ws.close(code=1011)
         return
 
-    await ws.send_json({"type": "ready", "model": settings.CODE_LLM_MODEL,
+    await ws.send_json({"type": "ready", "model": code_llm.model_name(),
                         "max_steps": settings.CODE_MAX_STEPS})
 
     session: CodeSession | None = None

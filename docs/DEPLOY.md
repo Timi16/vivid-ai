@@ -55,6 +55,16 @@ CORS_ORIGINS=["https://your-frontend-domain.com"]
 # to publish the API on the instance's own address.
 # BACKEND_BIND=127.0.0.1
 
+# Which upstream answers model calls: runpod (the pods below) or openrouter.
+# See "Failing over to OpenRouter" further down.
+MODEL_PROVIDER=runpod
+OPENROUTER_API_KEY=
+# LLM_PROVIDER= CODE_LLM_PROVIDER= ASR_PROVIDER= TTS_PROVIDER=   (per-service overrides)
+# OPENROUTER_CHAT_MODEL=google/gemma-3-27b-it
+# OPENROUTER_CODE_MODEL=mistralai/devstral-2512
+# OPENROUTER_STT_MODEL=openai/whisper-large-v3
+# OPENROUTER_TTS_MODEL=hexgrad/kokoro-82m
+
 # Model services on RunPod
 LLM_BASE_URL=https://<pod>-8000.proxy.runpod.net/v1
 LLM_MODEL=RedHatAI/gemma-3-27b-it-quantized.w4a16
@@ -164,6 +174,56 @@ docker compose -f docker-compose.prod.yml logs -f backend
 docker compose -f docker-compose.prod.yml exec postgres psql -U vivid vivid
 curl -s localhost:8000/v1/health/models | python3 -m json.tool   # RunPod services
 ```
+
+## Failing over to OpenRouter
+
+When the GPU pods are down, move the models to OpenRouter without touching any
+client. In `/opt/vivid/app.env`:
+
+```bash
+MODEL_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+```
+
+then restart the containers that read it:
+
+```bash
+cd /opt/vivid
+docker compose -f docker-compose.prod.yml up -d backend worker
+curl -s localhost:8000/v1/health/models | python3 -m json.tool   # each entry reports its provider
+curl -s localhost:8000/v1/health/code | python3 -m json.tool     # tool_calling should be true
+```
+
+The first report also carries an `openrouter` entry: the account balance,
+`audio_ready` (OpenRouter serves LLM calls on an empty balance but refuses
+transcription below $0.50, so voice input needs a top-up even when chat
+works), and `key_expires_at` — an outage switch whose key has quietly expired
+is no switch at all.
+
+What moves: the chat assistant (and its planner and title generation), the
+coding agent behind `/ws/code`, the `/v1` proxy that Vivid Code and the editor
+use, speech-to-text and text-to-speech. The `vivid-chat` and `vivid-code`
+aliases keep working; only the upstream behind them changes. Conversation
+history, prompts and token budgets never left the backend; the history clamp
+simply uses the live model's window (`OPENROUTER_*_CONTEXT_TOKENS`) instead of
+the pod's. Voice replies still reach the clients as WAV — OpenRouter's PCM is
+wrapped in the backend.
+
+What does not move: translation for yo/ig runs on the ASR pod, so those replies
+fall back to English (spoken in the fallback voice) while it is down, exactly
+as they do today when MADLAD fails. Embeddings and the reranker stay where
+they are. And OpenRouter has no Nigerian voice: `hexgrad/kokoro-82m` /
+`af_heart` is a clear English voice, not Vivid's. It is an outage mode.
+
+Per-service overrides move one thing at a time: `CODE_LLM_PROVIDER=openrouter`
+if only the coding pod died, or `ASR_PROVIDER=runpod TTS_PROVIDER=runpod` on
+top of `MODEL_PROVIDER=openrouter` to keep the Nigerian voices while only the
+LLM pod is out. Models default to OpenRouter's ids for what the pods serve
+(`google/gemma-3-27b-it`, `mistralai/devstral-2512`, `openai/whisper-large-v3`,
+`hexgrad/kokoro-82m`); override with the `OPENROUTER_*_MODEL` variables, and
+keep `OPENROUTER_TTS_SAMPLE_RATE` in step with the TTS model (24 kHz for the
+defaults). A misspelt provider name refuses to start rather than failing on the
+first turn. Set `MODEL_PROVIDER=runpod` and restart again to come home.
 
 ## The browser service
 

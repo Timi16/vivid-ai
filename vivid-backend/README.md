@@ -27,9 +27,10 @@ app/
     prompt.py          system prompts, history token budget, yo/ig base-lang map
     rate_limit.py      per-user rpm + one concurrent generation (Redis)
     storage.py         S3-compatible object storage (MinIO in dev)
-    models_gateway/    one thin adapter per RunPod service:
-                       llm (vLLM OpenAI-compatible, streaming), stt, tts,
-                       translate, embeddings, health
+    models_gateway/    one thin adapter per model service:
+                       llm + code_llm (OpenAI-compatible, streaming), stt,
+                       tts, translate, embeddings, health; provider.py is
+                       the MODEL_PROVIDER switch (our pods or OpenRouter)
   workers/     arq jobs: embed_message, generate_chat_title
 ```
 
@@ -119,6 +120,18 @@ there on reload.
 
 ## Notes
 
+- **GPUs down?** `MODEL_PROVIDER=openrouter` plus `OPENROUTER_API_KEY` sends
+  the assistant, the coding agent, the `/v1` proxy, speech-to-text and
+  text-to-speech to OpenRouter instead of the pods. History, prompts and
+  budgets stay in the backend (the history clamp just uses the live model's
+  window), and nothing above `services/models_gateway/provider.py` can tell,
+  so no client or frontend change is involved. `LLM_PROVIDER`,
+  `CODE_LLM_PROVIDER`, `ASR_PROVIDER` and `TTS_PROVIDER` override it per
+  service. Restart the backend and the worker, then check `/v1/health/models`:
+  every entry reports its `provider`, and an `openrouter` entry shows the
+  balance, `audio_ready` (transcription needs $0.50 on the account) and the
+  key's expiry. Translation for yo/ig stays on its pod and falls back to
+  English while that is down.
 - yo/ig follow the RunPod design: the LLM answers in English, the ASR server's
   `/translate` does the language work, history stores the English turns.
 - TTS routes through the ASR server's `/speak` (keeps its `clean_for_tts`

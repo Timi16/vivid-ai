@@ -239,7 +239,7 @@ class CodeSession:
         conversation outright — so old results are emptied in place instead,
         which is both valid and honest about what was lost.
         """
-        budget = int(settings.CODE_CONTEXT_TOKENS * _CHARS_PER_TOKEN)
+        budget = int(code_llm.loop_budget_tokens() * _CHARS_PER_TOKEN)
         total = sum(self._size(m) for m in self.messages)
         if total <= budget:
             return

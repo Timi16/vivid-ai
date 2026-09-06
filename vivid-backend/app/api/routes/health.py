@@ -28,6 +28,4 @@ async def code_check():
     narrates what it would do instead of doing anything.
     """
     from app.services.models_gateway import code_llm
-    if not code_llm.configured():
-        return {"ok": False, "detail": "CODE_LLM_BASE_URL is not set"}
     return await code_llm.probe_tool_support()

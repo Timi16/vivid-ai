@@ -13,6 +13,7 @@ away history instead of overflowing the window.
 """
 from app.core.config import settings
 from app.db.models import Client, Message
+from app.services.models_gateway import llm
 
 BASE_LANG = {"yo": "en", "ig": "en", "en_ng": "en", "en": "en", "pcm": "pcm"}
 
@@ -430,8 +431,10 @@ def build_messages(system_prompt: str, history: list[Message], user_text: str,
     # Clamp history to what the context window actually leaves over — the
     # system prompt, the new message and the reply budget are fixed costs, so
     # a bigger prompt trades away history instead of overflowing the window.
+    # The window is whichever upstream is live (a pod's, or OpenRouter's);
+    # the history itself and HISTORY_TOKEN_BUDGET stay the backend's.
     margin = 96  # chat-template scaffolding + estimator error
-    window_left = (settings.LLM_CONTEXT_TOKENS - settings.MAX_REPLY_TOKENS
+    window_left = (llm.context_tokens() - settings.MAX_REPLY_TOKENS
                    - estimate_tokens(system_prompt)
                    - estimate_tokens(content_text)
                    - IMAGE_TOKEN_COST * len(images or [])

@@ -45,6 +45,9 @@ def build_payload(body: dict, model: Model, stream: bool) -> dict:
                if key in _FORWARDED and value is not None}
     payload["model"] = model.upstream_model
     payload["stream"] = stream
+    # Routing preferences are ours, not the client's: `provider` is not in
+    # the allowlist above, so a client cannot steer OpenRouter through us.
+    payload.update(model.endpoint.extra_payload)
 
     # `max_completion_tokens` is the current OpenAI spelling; vLLM still reads
     # `max_tokens`. Accept either from the client, send the one pods know.
@@ -60,13 +63,14 @@ def build_payload(body: dict, model: Model, stream: bool) -> dict:
 
 
 def _url(model: Model) -> str:
-    return f"{model.base_url.rstrip('/')}/chat/completions"
+    return model.endpoint.url()
 
 
 async def complete(model: Model, payload: dict) -> dict:
     """One non-streaming completion, returned as the pod worded it."""
     try:
-        r = await http.client().post(_url(model), json=payload)
+        r = await http.client().post(_url(model), json=payload,
+                                     headers=model.endpoint.headers)
     except httpx.HTTPError as e:
         raise UpstreamError(f"the model could not be reached: {e}") from e
     if r.status_code >= 400:
@@ -96,7 +100,8 @@ class StreamedCompletion:
     async def __aiter__(self) -> AsyncIterator[bytes]:
         try:
             async with http.client().stream(
-                    "POST", _url(self._model), json=self._payload) as r:
+                    "POST", _url(self._model), json=self._payload,
+                    headers=self._model.endpoint.headers) as r:
                 if r.status_code >= 400:
                     body = (await r.aread()).decode(errors="replace")
                     raise UpstreamError(

@@ -440,7 +440,9 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
     async with async_session() as db:
         assistant_msg = Message(
             chat_id=chat_id, role="assistant", content=reply,
-            model=settings.LLM_MODEL, used_tools=used_tools,
+            # The model that actually answered — it differs from LLM_MODEL
+            # for the hours the provider switch points at OpenRouter.
+            model=llm.model_name(), used_tools=used_tools,
             tokens_in=(usage or {}).get("prompt_tokens"),
             tokens_out=(usage or {}).get("completion_tokens"),
             latency_ms=latency_ms)
