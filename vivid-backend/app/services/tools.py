@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 from app.services import search
-from app.services.models_gateway import http
+from app.services.models_gateway import http, media
 from app.services.vivid_tools import call as _vt
 
 _HEADERS = {"User-Agent": "VividAI-backend/0.1"}
@@ -368,3 +368,73 @@ async def tool_run_code(args: dict, ctx: ToolContext) -> str:
     if not pieces:
         pieces.append("the program produced no output — it must print() its result")
     return "\n".join(pieces)
+
+
+# ------------------------------------------------------------ images, video
+# Both tools hand the bytes to the reply as an attachment and tell the model
+# only that. The model never sees image data: given a base64 blob in its
+# context it repeats it, and the user watches a wall of characters stream in
+# where a picture should be. Failures go back as the public line, because a
+# tool observation ends up in the model's prompt and from there, reworded,
+# in front of the user.
+_MEDIA_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
+              "image/svg+xml": "svg", "video/mp4": "mp4", "video/webm": "webm"}
+
+
+def _media_name(ctx: ToolContext, kind: str, mime: str) -> str:
+    ext = _MEDIA_EXT.get(mime) or mime.split("/")[-1] or "bin"
+    return f"vivid-{kind}-{len(ctx.outputs) + 1}.{ext}"
+
+
+@tool("generate_image",
+      ("create a NEW picture from a description: a drawing, illustration, "
+       "photo-style image, logo, poster, anything the user asks you to make, "
+       "draw, paint, design or generate. The image is attached to the reply "
+       "automatically. Never use run_code to draw, and never write image "
+       "data or links yourself"),
+      args="prompt, aspect_ratio (1:1 | 16:9 | 9:16, optional)",
+      status="Painting the image…", enabled=media.image_available, context=True)
+async def tool_generate_image(args: dict, ctx: ToolContext) -> str:
+    prompt = str(args.get("prompt") or "").strip()
+    if not prompt:
+        return "error: generate_image needs a prompt describing the picture"
+    try:
+        data, mime = await media.generate_image(
+            prompt, str(args.get("aspect_ratio") or "1:1"))
+    except media.MediaUnavailable as e:
+        return f"error: {e.public}"
+    name = _media_name(ctx, "image", mime)
+    ctx.outputs.append({"name": name, "mime": mime, "data": data})
+    return (f"the image for \"{prompt[:160]}\" is generated and ATTACHED to "
+            f"your reply as {name}. Tell the user it is ready in a sentence "
+            "or two describing it. Do not include a link, a markdown image "
+            "or any image data.")
+
+
+@tool("generate_video",
+      ("create a NEW short video clip from a description: an animation, a "
+       "scene, a product shot, anything the user asks you to film, animate "
+       "or generate as video. Takes a few minutes; the clip is attached to "
+       "the reply automatically. Never use run_code for video"),
+      args="prompt, seconds (optional, up to the deployment's ceiling)",
+      status="Rendering the video… this takes a few minutes",
+      enabled=media.video_available, context=True)
+async def tool_generate_video(args: dict, ctx: ToolContext) -> str:
+    prompt = str(args.get("prompt") or "").strip()
+    if not prompt:
+        return "error: generate_video needs a prompt describing the clip"
+    try:
+        seconds = int(args.get("seconds") or 0) or None
+    except (TypeError, ValueError):
+        seconds = None
+    try:
+        data, mime = await media.generate_video(
+            prompt, seconds, str(args.get("aspect_ratio") or "16:9"),
+            on_status=ctx.status)
+    except media.MediaUnavailable as e:
+        return f"error: {e.public}"
+    name = _media_name(ctx, "video", mime)
+    ctx.outputs.append({"name": name, "mime": mime, "data": data})
+    return (f"the video for \"{prompt[:160]}\" is rendered and ATTACHED to "
+            f"your reply as {name}. Tell the user it is ready in a sentence "
+            "or two. Do not include a link or any file data.")

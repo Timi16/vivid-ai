@@ -3,8 +3,10 @@ import {
   ComputerIcon,
   CustomizeIcon,
   HistoryIcon,
+  ImagesIcon,
   SettingsIcon,
   SpacesIcon,
+  VideosIcon,
 } from "@/components/ui/icons";
 
 export interface NavItem {
@@ -17,6 +19,13 @@ export interface NavItem {
 // hidden until they are real: a link into "isn't live yet" costs more trust
 // than a missing link. Set NEXT_PUBLIC_PREVIEW_FEATURES=1 to see them.
 export const previewFeatures = process.env.NEXT_PUBLIC_PREVIEW_FEATURES === "1";
+
+// What Vivid makes, kept next to New chat and Search at the top of the
+// sidebar: these are places to go, not settings.
+export const primaryNav: NavItem[] = [
+  { label: "Images", href: "/images", icon: ImagesIcon },
+  { label: "Videos", href: "/videos", icon: VideosIcon },
+];
 
 const secondary: NavItem[] = [
   { label: "Artifacts", href: "/artifacts", icon: ArtifactsIcon },

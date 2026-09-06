@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PencilIcon, PlusIcon, SearchIcon, SidebarIcon, TrashIcon } from "@/components/ui/icons";
 import { AccountMenu } from "@/components/layout/account-menu";
-import { secondaryNav } from "@/components/layout/nav-items";
+import { primaryNav, secondaryNav } from "@/components/layout/nav-items";
 import { displayName, useMe } from "@/hooks/use-me";
 import { useChats, useDeleteChat, useUpdateChat } from "@/features/history/hooks/use-chats";
 import type { HistoryEntry } from "@/features/history/lib/data";
@@ -66,7 +66,13 @@ export function Sidebar({
       </div>
 
       <div className="flex flex-col gap-0.5 px-2">
-        <RailButton href="/" label="New chat" icon={PlusIcon} collapsed={collapsed} active={pathname === "/"} />
+        <RailButton
+          href="/"
+          label="New chat"
+          icon={PlusIcon}
+          collapsed={collapsed}
+          active={pathname === "/"}
+        />
         <RailButton
           label="Search"
           icon={SearchIcon}
@@ -74,13 +80,28 @@ export function Sidebar({
           onClick={onOpenSearch}
           hint="⌘K"
         />
+        {primaryNav.map(({ label, href, icon }) => (
+          <RailButton
+            key={href}
+            href={href}
+            label={label}
+            icon={icon}
+            collapsed={collapsed}
+            active={pathname === href}
+          />
+        ))}
       </div>
 
       {!collapsed ? (
         <nav aria-label="Recent chats" className="mt-3 min-h-0 flex-1 overflow-y-auto px-2">
           {pinned.length ? <ChatGroup label="Pinned" entries={pinned} pathname={pathname} /> : null}
           {groups.map((group) => (
-            <ChatGroup key={group.label} label={group.label} entries={group.entries} pathname={pathname} />
+            <ChatGroup
+              key={group.label}
+              label={group.label}
+              entries={group.entries}
+              pathname={pathname}
+            />
           ))}
           {!chats.length ? (
             <p className="text-fg/35 px-2.5 py-3 text-[12.5px]">Your chats will show up here.</p>
@@ -158,7 +179,12 @@ function RailButton({
     );
   }
   return (
-    <button type="button" onClick={onClick} title={collapsed ? label : undefined} className={className}>
+    <button
+      type="button"
+      onClick={onClick}
+      title={collapsed ? label : undefined}
+      className={className}
+    >
       {body}
     </button>
   );

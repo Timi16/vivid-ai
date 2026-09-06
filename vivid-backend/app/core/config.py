@@ -97,6 +97,25 @@ class Settings(BaseSettings):
     # their rule, not ours; /health/models reports `audio_ready` against it so
     # an empty balance shows up before the first voice turn fails.
     OPENROUTER_AUDIO_MIN_BALANCE: float = 0.50
+    # --- Image and video generation --------------------------------------
+    # The pods serve no image or video model, so these go to OpenRouter
+    # whatever MODEL_PROVIDER says, and the generate_image / generate_video
+    # tools exist only while OPENROUTER_API_KEY is set. Nothing there makes
+    # pictures for free: flux.2 klein is about $0.003 an image at 1K; video
+    # is priced per clip and the cost is only known when the clip is done.
+    # Pick from /models?output_modalities=image and =video.
+    OPENROUTER_IMAGE_MODEL: str = "black-forest-labs/flux.2-klein-4b"
+    OPENROUTER_IMAGE_RESOLUTION: str = "1K"  # 512 | 1K | 2K | 4K
+    OPENROUTER_IMAGE_TIMEOUT: int = 120
+    OPENROUTER_VIDEO_MODEL: str = "google/veo-3.1-fast"
+    # Clip length ceiling; the model can ask for less. Longer clips cost more
+    # and render longer, and a chat turn is waiting.
+    OPENROUTER_VIDEO_MAX_SECONDS: int = 5
+    # A clip renders asynchronously for minutes. The turn polls this often and
+    # gives up after this long, so a stuck job cannot hold a user's only
+    # generation slot forever.
+    OPENROUTER_VIDEO_POLL_SECONDS: int = 5
+    OPENROUTER_VIDEO_TIMEOUT: int = 300
     # Attribution headers OpenRouter shows on its rankings. Optional.
     OPENROUTER_SITE_URL: str = ""
     OPENROUTER_APP_NAME: str = "Vivid AI"

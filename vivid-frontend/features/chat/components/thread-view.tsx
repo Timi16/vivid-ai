@@ -219,6 +219,9 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
     const attachmentIds = pendingImage ? [pendingImage.id] : [];
     const imageUrl = pendingImage?.url;
     setPendingImage(null);
+    // Sending is the reader asking to see what comes back: follow the reply
+    // even if they had scrolled up to reread something first.
+    stickRef.current = true;
     await thread.send(text, attachmentIds, imageUrl);
   }
 
@@ -389,6 +392,17 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
                           className="max-h-[300px] max-w-[320px] rounded-xl"
                         />
                       </button>
+                    ))}
+                  {message.attachments
+                    ?.filter((a) => a.kind === "video" && a.url)
+                    .map((a) => (
+                      <video
+                        key={a.id}
+                        src={a.url ?? ""}
+                        controls
+                        preload="metadata"
+                        className="max-h-[320px] w-fit max-w-[480px] rounded-xl bg-black"
+                      />
                     ))}
 
                   <Markdown onOpenArtifact={setArtifact}>{message.content}</Markdown>

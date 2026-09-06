@@ -134,6 +134,15 @@ there on reload.
   the token the route is ok flags only, and nothing a user sees — error
   toasts, message rows, `/v1` responses — names the upstream. Translation
   for yo/ig stays on its pod and falls back to English while that is down.
+- **Images and video** come from OpenRouter's `/images` and `/videos`
+  endpoints through the `generate_image` and `generate_video` tools
+  (`services/models_gateway/media.py`). The pods have no such model, so these
+  ignore `MODEL_PROVIDER` and exist only while `OPENROUTER_API_KEY` is set.
+  The bytes go on the reply as an attachment (`kind` image or video) and the
+  model is told only that the file is attached, never given the data. The
+  Artifacts page lists them, and the apps have Images and Videos pages.
+  Nothing on OpenRouter generates media for free; `OPENROUTER_IMAGE_MODEL`
+  defaults to the cheapest usable one.
 - yo/ig follow the RunPod design: the LLM answers in English, the ASR server's
   `/translate` does the language work, history stores the English turns.
 - TTS routes through the ASR server's `/speak` (keeps its `clean_for_tts`

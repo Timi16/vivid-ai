@@ -14,16 +14,16 @@ router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 async def list_artifacts(limit: int = Query(60, le=200),
                          user: User = Depends(get_current_user),
                          db: AsyncSession = Depends(get_db)):
-    """Everything Vivid generated for this user: files and images attached to
-    assistant replies, newest first. Audio is left out; spoken replies are
-    playback, not something to keep."""
+    """Everything Vivid generated for this user: files, images and video
+    attached to assistant replies, newest first. Audio is left out; spoken
+    replies are playback, not something to keep."""
     rows = await db.execute(
         select(Attachment, Chat.title)
         .join(Message, Message.id == Attachment.message_id)
         .join(Chat, Chat.id == Attachment.chat_id)
         .where(Attachment.user_id == user.id,
                Message.role == "assistant",
-               Attachment.kind.in_(("file", "image")))
+               Attachment.kind.in_(("file", "image", "video")))
         .order_by(Attachment.created_at.desc())
         .limit(limit))
     return [

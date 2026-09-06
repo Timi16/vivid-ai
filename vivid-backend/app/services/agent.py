@@ -39,6 +39,13 @@ def _planner_prompt(usable: dict) -> str:
     today = datetime.now(ZoneInfo("Africa/Lagos")).strftime("%A %d %B %Y")
     lines = "\n".join(f"- {name}({t.args}): {t.desc}"
                       for name, t in usable.items())
+    media_rule = ""
+    if "generate_image" in usable or "generate_video" in usable:
+        media_rule = (
+            "RULE: making, drawing, painting, designing or generating a "
+            "picture, image, logo or poster = generate_image; a video, clip "
+            "or animation = generate_video. Never run_code for those, and "
+            "never produce image data, base64 or links yourself.\n")
     return (
         f"Today is {today}. You are a tool planner for a Nigerian assistant. "
         "Your training data is stale: any question about prices, rates, "
@@ -54,6 +61,7 @@ def _planner_prompt(usable: dict) -> str:
         "it, reading text in it, solving a question shown in it — needs NO "
         "tool: the model sees the image directly. Never attempt OCR "
         "(pytesseract etc.) on an attached image.\n"
+        f"{media_rule}"
         'Reply with ONLY JSON, no prose: {"calls": [{"tool": "<name>", '
         '"args": {...}}]} — use {"calls": []} when no tool is needed '
         "(opinions, chit-chat, general knowledge that does not change)."

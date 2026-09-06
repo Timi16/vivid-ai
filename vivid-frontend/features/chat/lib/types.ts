@@ -19,7 +19,7 @@ export interface Message {
 
 export interface MessageAttachment {
   id: string;
-  kind: "image" | "file" | "audio";
+  kind: "image" | "video" | "file" | "audio";
   filename: string | null;
   mime: string;
   url?: string | null;

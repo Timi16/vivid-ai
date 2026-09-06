@@ -53,6 +53,10 @@ async def openrouter_account() -> dict | None:
     """
     roles = [r for r in provider.ROLES
              if provider.provider_for(r) == provider.OPENROUTER]
+    if not settings.OPENROUTER_API_KEY:
+        # Image and video always point at OpenRouter, but a pods-only
+        # deployment that never set a key has no account to report on.
+        roles = [r for r in roles if r not in provider.MEDIA_ROLES]
     if not roles:
         return None
     ep = provider.endpoint(roles[0])
@@ -95,6 +99,8 @@ async def check_all(detail: bool = False) -> dict:
         _provider_check("code_llm", provider.CODE, "/models", detail),
         _provider_check("asr", provider.ASR, "/health", detail),
         _provider_check("tts", provider.TTS, "/health", detail),
+        _provider_check("image", provider.IMAGE, "/models", detail),
+        _provider_check("video", provider.VIDEO, "/models", detail),
         _check("translate", f"{trans}/health" if trans else ""),
         _check("embeddings", settings.EMBEDDINGS_URL),
         _check("reranker", f"{reranker}/health" if reranker else ""),

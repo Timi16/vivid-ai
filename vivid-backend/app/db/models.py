@@ -130,7 +130,7 @@ class Attachment(Base):
         ForeignKey("chats.id", ondelete="CASCADE"), default=None, index=True)
     user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    kind: Mapped[str] = mapped_column(String(16))  # image | file | audio
+    kind: Mapped[str] = mapped_column(String(16))  # image | video | file | audio
     filename: Mapped[str | None] = mapped_column(String(256), default=None)
     storage_key: Mapped[str] = mapped_column(String(512))
     mime: Mapped[str] = mapped_column(String(128))

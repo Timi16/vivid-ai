@@ -25,7 +25,10 @@ interface MarkdownProps {
 // rules in globals.css so it sits inside the thread typography.
 export function Markdown({ children, onOpenArtifact, generating = false }: MarkdownProps) {
   return (
-    <div className="vd-md text-fg/85 text-[15px] leading-[1.75]">
+    // overflow-wrap:anywhere: a reply with one unbroken run (a long URL, a
+    // hash, a model that streams base64) must wrap inside the column instead
+    // of widening the page.
+    <div className="vd-md text-fg/85 text-[15px] leading-[1.75] [overflow-wrap:anywhere]">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}

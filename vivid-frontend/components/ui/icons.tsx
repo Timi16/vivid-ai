@@ -80,6 +80,33 @@ export function CustomizeIcon(props: IconProps) {
   );
 }
 
+export function ImagesIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="5" width="16" height="14" rx="2.5" stroke={stroke} strokeWidth={strokeWidth} />
+      <circle cx="9" cy="10" r="1.5" stroke={stroke} strokeWidth={strokeWidth} />
+      <path d="M4.5 17l4.5-4.5 3 3 3-3.5 4.5 5" stroke={stroke} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+}
+
+export function VideosIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect
+        x="3.5"
+        y="6"
+        width="12.5"
+        height="12"
+        rx="2.5"
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
+      <path d="M16 10.5l4.5-2.5v8L16 13.5" stroke={stroke} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+}
+
 export function HistoryIcon(props: IconProps) {
   return (
     <Svg {...props}>

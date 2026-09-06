@@ -103,6 +103,17 @@ def _superseded(cancel_event) -> bool:
     return cancel_event is not None and cancel_event.is_set()
 
 
+def _attachment_kind(mime: str) -> str:
+    """How a tool-created file is filed: pictures and clips get their own
+    kinds so the apps can show them inline and list them on their own pages;
+    everything else is a document to download."""
+    if mime.startswith("image/"):
+        return "image"
+    if mime.startswith("video/"):
+        return "video"
+    return "file"
+
+
 async def run_text_turn(conn: Connection, state, user_id: str, chat_id: str,
                         text: str, attachment_ids: list[str] | None = None,
                         language: str | None = None, voice_reply: bool = False,
@@ -472,7 +483,7 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
                 att = Attachment(
                     message_id=assistant_msg_id, chat_id=chat_id,
                     user_id=user_id,
-                    kind="image" if out["mime"].startswith("image/") else "file",
+                    kind=_attachment_kind(out["mime"]),
                     filename=out["name"], storage_key=key, mime=out["mime"],
                     size_bytes=len(out["data"]))
                 db.add(att)

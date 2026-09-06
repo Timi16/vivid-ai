@@ -115,7 +115,7 @@ export interface ChatOut {
 
 export interface ArtifactOut {
   id: string;
-  kind: "image" | "file";
+  kind: "image" | "video" | "file";
   filename: string | null;
   mime: string;
   size_bytes: number;
@@ -128,7 +128,7 @@ export interface ArtifactOut {
 
 export interface AttachmentOut {
   id: string;
-  kind: "image" | "file" | "audio";
+  kind: "image" | "video" | "file" | "audio";
   filename: string | null;
   mime: string;
   size_bytes: number;
@@ -154,8 +154,7 @@ export const backend = {
       json: { access_token: accessToken, ...profile },
     }),
   me: () => request<UserOut>("/auth/me"),
-  updateMe: (name: string) =>
-    request<UserOut>("/auth/me", { method: "PATCH", json: { name } }),
+  updateMe: (name: string) => request<UserOut>("/auth/me", { method: "PATCH", json: { name } }),
   chats: () => request<ChatOut[]>("/chats"),
   chat: (id: string) => request<ChatOut>(`/chats/${id}`),
   createChat: (language = "en") =>
@@ -167,10 +166,9 @@ export const backend = {
   messages: (chatId: string) => request<MessageOut[]>(`/chats/${chatId}/messages`),
   // Synthesizes on first call, then returns the cached audio attachment.
   speakMessage: (chatId: string, messageId: string) =>
-    request<AttachmentOut & { url: string }>(
-      `/chats/${chatId}/messages/${messageId}/speech`,
-      { method: "POST" }
-    ),
+    request<AttachmentOut & { url: string }>(`/chats/${chatId}/messages/${messageId}/speech`, {
+      method: "POST",
+    }),
   upload: (file: File, chatId?: string) => {
     const form = new FormData();
     form.append("file", file);
@@ -180,7 +178,8 @@ export const backend = {
       body: form,
     });
   },
-  connectors: () => request<{ id: string; provider: string; name: string; mode: string }[]>("/connectors"),
+  connectors: () =>
+    request<{ id: string; provider: string; name: string; mode: string }[]>("/connectors"),
   // A cheap authed call whose 401-refresh path guarantees a fresh access
   // token right before a websocket connect.
   ensureFreshToken: () => request<ChatOut[]>("/chats?limit=1"),

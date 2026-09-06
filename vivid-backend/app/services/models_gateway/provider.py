@@ -70,8 +70,17 @@ CODE = "code"
 ASR = "asr"
 #: Text-to-speech for voice replies.
 TTS = "tts"
+#: Picture generation for the generate_image tool.
+IMAGE = "image"
+#: Clip generation for the generate_video tool.
+VIDEO = "video"
 
-ROLES = (CHAT, CODE, ASR, TTS)
+#: Roles the MODEL_PROVIDER switch moves between the pods and OpenRouter.
+SWITCHED_ROLES = (CHAT, CODE, ASR, TTS)
+#: Roles only OpenRouter serves: the pods have nothing that makes pictures or
+#: video, so these ignore the switch and exist only while the key is set.
+MEDIA_ROLES = (IMAGE, VIDEO)
+ROLES = SWITCHED_ROLES + MEDIA_ROLES
 
 
 @dataclass(frozen=True)
@@ -130,6 +139,8 @@ class Endpoint:
 
 def provider_for(role: str) -> str:
     """The master switch, unless this role has its own override set."""
+    if role in MEDIA_ROLES:
+        return OPENROUTER
     override = {
         CHAT: settings.LLM_PROVIDER,
         CODE: settings.CODE_LLM_PROVIDER,
@@ -187,6 +198,8 @@ def _openrouter(role: str) -> Endpoint:
                "OPENROUTER_CHAT_MODEL", settings.OPENROUTER_CODE_CONTEXT_TOKENS),
         ASR: (settings.OPENROUTER_STT_MODEL, "OPENROUTER_STT_MODEL", 0),
         TTS: (settings.OPENROUTER_TTS_MODEL, "OPENROUTER_TTS_MODEL", 0),
+        IMAGE: (settings.OPENROUTER_IMAGE_MODEL, "OPENROUTER_IMAGE_MODEL", 0),
+        VIDEO: (settings.OPENROUTER_VIDEO_MODEL, "OPENROUTER_VIDEO_MODEL", 0),
     }[role]
     missing = ("OPENROUTER_API_KEY is not set" if not settings.OPENROUTER_API_KEY
                else f"{model_var} is not set" if not model else None)

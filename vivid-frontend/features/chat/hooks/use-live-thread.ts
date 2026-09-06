@@ -68,6 +68,48 @@ export function useLiveThread(
   const onDraftRef = useRef(onDraftTranscript);
   // Whether anything is in flight, readable from event handlers.
   const activeRef = useRef(false);
+  // The live list as event handlers see it; they close over the first render.
+  const liveRef = useRef<LiveMessage[]>([]);
+  useEffect(() => {
+    liveRef.current = live;
+  }, [live]);
+
+  // A user bubble can be edited only once it carries its database id. The
+  // id normally arrives on `done`.
+  const adoptSavedUserId = useCallback((id: string) => {
+    setLive((prev) => {
+      const next = [...prev];
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].role === "user" && next[i].id.startsWith("local-")) {
+          next[i] = { ...next[i], id };
+          break;
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  // A turn that fails never sends `done`, but the message was saved before
+  // the model was called, so its id is there to be looked up. Without this
+  // the bubble keeps its placeholder id and the one thing someone wants to
+  // do after a failure, fix the message and resend, is not offered.
+  const adoptSavedUserIdAfterFailure = useCallback(async () => {
+    const pending = [...liveRef.current]
+      .reverse()
+      .find((m) => m.role === "user" && m.id.startsWith("local-"));
+    if (!pending) return;
+    try {
+      const saved = await backend.messages(chatRef.current);
+      const match = [...saved]
+        .reverse()
+        .find((m) => m.role === "user" && m.content === pending.content);
+      if (match) adoptSavedUserId(match.id);
+    } catch (err) {
+      // The failed turn has already been reported; the cost of this failing
+      // too is an uneditable bubble, not a second alarm.
+      console.warn("could not recover the saved message id", err);
+    }
+  }, [adoptSavedUserId]);
   // Mirror the latest props/state into refs after each render so socket
   // callbacks read current values without re-subscribing.
   useEffect(() => {
@@ -175,18 +217,7 @@ export function useLiveThread(
           turnAudioRef.current = [];
           // Retro-fill the just-sent user message with its database id so it
           // becomes editable without a reload.
-          if (event.user_message_id) {
-            setLive((prev) => {
-              const next = [...prev];
-              for (let i = next.length - 1; i >= 0; i--) {
-                if (next[i].role === "user" && next[i].id.startsWith("local-")) {
-                  next[i] = { ...next[i], id: event.user_message_id as string };
-                  break;
-                }
-              }
-              return next;
-            });
-          }
+          if (event.user_message_id) adoptSavedUserId(event.user_message_id);
           if (event.message_id && event.text) {
             pushActivity({
               kind: "reply",
@@ -243,6 +274,7 @@ export function useLiveThread(
           setBusy(false);
           setTranscribing(false);
           turnAudioRef.current = [];
+          if (!lostConnection) void adoptSavedUserIdAfterFailure();
           const message = event.message ?? event.code ?? "Something went wrong";
           setError(message);
           toast(message);
@@ -263,7 +295,7 @@ export function useLiveThread(
         }
       }
     },
-    [queryClient, startListening]
+    [adoptSavedUserId, adoptSavedUserIdAfterFailure, endCall, queryClient, startListening]
   );
 
   useEffect(() => onChatEvent(handleEvent), [handleEvent]);
