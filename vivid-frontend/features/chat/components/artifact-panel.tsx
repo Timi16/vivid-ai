@@ -42,7 +42,12 @@ export function ArtifactPanel({
   onClose,
   className,
 }: ArtifactPanelProps) {
-  const previewable = artifact.kind === "code" && isPreviewable(artifact.language);
+  // A website previews as a page; code that produced a picture or a clip
+  // previews as that result. Either way the reader lands on the thing they
+  // asked for, with the code one tab away.
+  const site = artifact.kind === "code" && isPreviewable(artifact.language);
+  const result = artifact.kind === "code" ? artifact.result : undefined;
+  const previewable = site || Boolean(result);
   const [view, setView] = useState<"preview" | "code">(
     previewable && !generating ? "preview" : "code"
   );
@@ -75,8 +80,12 @@ export function ArtifactPanel({
       window.open(artifact.url, "_blank", "noreferrer");
       return;
     }
+    if (result && view === "preview") {
+      window.open(result.url, "_blank", "noreferrer");
+      return;
+    }
     const blob = new Blob([artifact.content], {
-      type: previewable ? "text/html" : "text/plain",
+      type: site ? "text/html" : "text/plain",
     });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -128,7 +137,7 @@ export function ArtifactPanel({
           </div>
         ) : null}
 
-        {showPreview ? (
+        {showPreview && site ? (
           <>
             <div className="vd-glass-control hidden rounded-full p-0.5 text-[12px] sm:flex">
               {(["desktop", "phone"] as const).map((option) => (
@@ -169,7 +178,21 @@ export function ArtifactPanel({
 
       <div className="min-h-0 flex-1 overflow-auto">
         {artifact.kind === "code" ? (
-          showPreview ? (
+          showPreview && result ? (
+            <div className="grid h-full min-h-[420px] place-items-center p-3">
+              {result.mime.startsWith("video/") ? (
+                <video
+                  src={result.url}
+                  controls
+                  preload="metadata"
+                  className="max-h-full max-w-full rounded-xl bg-black"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={result.url} alt={result.title} className="max-h-full max-w-full" />
+              )}
+            </div>
+          ) : showPreview ? (
             <div
               className={cn(
                 "h-full min-h-[420px]",

@@ -1,7 +1,16 @@
+// What a piece of code produced, when the reply also carries it: the picture
+// or clip a tool made from that code. The panel previews this the way it
+// previews a website, with the code one tab away.
+export interface ArtifactResult {
+  url: string;
+  mime: string;
+  title: string;
+}
+
 // An artifact is something the assistant made that deserves its own surface
 // beside the chat: a code block, a website, or a generated file.
 export type Artifact =
-  | { kind: "code"; title: string; language: string; content: string }
+  | { kind: "code"; title: string; language: string; content: string; result?: ArtifactResult }
   | { kind: "file"; title: string; url: string; mime: string };
 
 // Languages whose code blocks can be shown as a live preview.

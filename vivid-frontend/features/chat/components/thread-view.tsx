@@ -214,6 +214,25 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
   }, [messages.length, thread.stream, thread.activity.length]);
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
+  // A code block whose reply also carries a picture or a clip opens with
+  // that result as its preview: the code is how it was made, the image is
+  // what the reader asked for.
+  function openArtifactFrom(message: LiveMessage) {
+    return (artifact: Artifact) => {
+      const made = message.attachments?.find(
+        (a) => (a.kind === "image" || a.kind === "video") && a.url
+      );
+      if (artifact.kind === "code" && made?.url) {
+        setArtifact({
+          ...artifact,
+          result: { url: made.url, mime: made.mime, title: made.filename ?? artifact.title },
+        });
+        return;
+      }
+      setArtifact(artifact);
+    };
+  }
+
   async function submit(text: string) {
     updatePrompt("");
     const attachmentIds = pendingImage ? [pendingImage.id] : [];
@@ -405,7 +424,7 @@ export function ThreadView({ sessionId, spaces }: ThreadViewProps) {
                       />
                     ))}
 
-                  <Markdown onOpenArtifact={setArtifact}>{message.content}</Markdown>
+                  <Markdown onOpenArtifact={openArtifactFrom(message)}>{message.content}</Markdown>
 
                   {message.attachments
                     // The stored copy of a website already shows as the card

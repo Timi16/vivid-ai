@@ -537,13 +537,32 @@ body {
 }
 
 /* ---- assistant markdown (.vd-md) — rendered by features/chat/markdown ---- */
-.vd-md > *:first-child { margin-top: 0; }
-.vd-md > *:last-child { margin-bottom: 0; }
-.vd-md p, .vd-md ul, .vd-md ol, .vd-md table, .vd-md blockquote { margin: 10px 0; }
-.vd-md ul, .vd-md ol { padding-left: 22px; }
-.vd-md ul { list-style: disc; }
-.vd-md ol { list-style: decimal; }
-.vd-md li { margin: 4px 0; }
+.vd-md > *:first-child {
+  margin-top: 0;
+}
+.vd-md > *:last-child {
+  margin-bottom: 0;
+}
+.vd-md p,
+.vd-md ul,
+.vd-md ol,
+.vd-md table,
+.vd-md blockquote {
+  margin: 10px 0;
+}
+.vd-md ul,
+.vd-md ol {
+  padding-left: 22px;
+}
+.vd-md ul {
+  list-style: disc;
+}
+.vd-md ol {
+  list-style: decimal;
+}
+.vd-md li {
+  margin: 4px 0;
+}
 .vd-md code {
   background: color-mix(in srgb, var(--color-fg) 8%, transparent);
   border-radius: 5px;
@@ -560,9 +579,17 @@ body {
   font-size: 13px;
   line-height: 1.55;
 }
-.vd-md pre code { background: none; padding: 0; color: inherit; }
-.vd-md table { border-collapse: collapse; font-size: 14px; }
-.vd-md th, .vd-md td {
+.vd-md pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+.vd-md table {
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.vd-md th,
+.vd-md td {
   border: 1px solid color-mix(in srgb, var(--color-fg) 15%, transparent);
   padding: 6px 12px;
 }
@@ -571,16 +598,29 @@ body {
   padding-left: 14px;
   opacity: 0.85;
 }
-.vd-md h1, .vd-md h2, .vd-md h3 { margin: 14px 0 6px; font-weight: 600; font-size: 16px; }
-.vd-md a { text-decoration: underline; text-underline-offset: 2px; }
+.vd-md h1,
+.vd-md h2,
+.vd-md h3 {
+  margin: 14px 0 6px;
+  font-weight: 600;
+  font-size: 16px;
+}
+.vd-md a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 /* Fenced code blocks inside assistant markdown. */
 .vd-code-block {
-  background: color-mix(in oklab, var(--color-fg) 5%, transparent);
-  border: 1px solid color-mix(in oklab, var(--color-fg) 10%, transparent);
+  background: color-mix(in oklab, var(--color-fg) 7%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-fg) 12%, transparent);
 }
+/* The generic .vd-md pre is ink on a solid light slab. Inside the block the
+   slab goes transparent, so the ink must go back to the page colour too, or
+   dark mode paints near-black text on a near-black panel. */
 .vd-md .vd-code-block pre {
   background: transparent;
+  color: inherit;
   border: 0;
   border-radius: 0;
 }
