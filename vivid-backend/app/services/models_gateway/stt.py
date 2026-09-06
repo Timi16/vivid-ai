@@ -12,8 +12,9 @@ from app.core.config import settings
 from app.services.models_gateway import http, provider
 
 
-class STTUnavailable(Exception):
-    pass
+class STTUnavailable(provider.UpstreamError):
+    public = ("Speech recognition is unavailable right now. "
+              "You can type your message instead.")
 
 
 #: Multipart filename extensions per mime. OpenRouter sniffs the format from

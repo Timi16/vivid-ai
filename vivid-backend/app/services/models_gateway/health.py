@@ -1,5 +1,12 @@
 """Health poll of every model service (spec section 5): the UI uses this to
-show 'models warming up' instead of failing cold."""
+show 'models warming up' instead of failing cold.
+
+Two views of the same poll. The public one is ok/status per service and
+nothing else — the web app calls it unauthenticated, and which upstream is
+behind a service, or what our account there holds, is not the public's
+business. The detailed one (an operator with HEALTH_TOKEN) adds the provider
+and model per service and the OpenRouter account entry.
+"""
 import asyncio
 
 from app.core.config import settings
@@ -17,10 +24,12 @@ async def _check(name: str, url: str, headers: dict | None = None,
         r = await http.client().get(url, timeout=5, headers=headers or {})
         return name, {"ok": r.status_code == 200, "status": r.status_code, **extra}
     except Exception as e:
-        return name, {"ok": False, "status": str(e), **extra}
+        # An httpx message can carry the host it failed to reach.
+        return name, {"ok": False, "status": provider.scrub(str(e) or "unreachable"),
+                      **extra}
 
 
-def _provider_check(name: str, role: str, pod_path: str):
+def _provider_check(name: str, role: str, pod_path: str, detail: bool):
     """One probe per role, whichever way the switch is set. A pod answers on
     its own health path; OpenRouter answers GET /models on the shared root.
     OpenRouter's listing is public, but the key is sent anyway: a rejected
@@ -28,7 +37,8 @@ def _provider_check(name: str, role: str, pod_path: str):
     ep = provider.endpoint(role)
     path = pod_path if ep.is_pod else "/models"
     return _check(name, ep.url(path) if ep.configured else "",
-                  headers=ep.headers, extra=provider.describe(role))
+                  headers=ep.headers,
+                  extra=provider.describe(role) if detail else None)
 
 
 async def openrouter_account() -> dict | None:
@@ -73,16 +83,18 @@ async def openrouter_account() -> dict | None:
     return {"ok": True, "status": 200, **entry}
 
 
-async def check_all() -> dict:
+async def check_all(detail: bool = False) -> dict:
+    """ok/status per service; with `detail`, also which provider and model
+    serve each role and the OpenRouter account entry."""
     trans = (settings.TRANSLATE_BASE_URL or settings.ASR_BASE_URL).rstrip("/")
     tools_url = settings.VIVID_TOOLS_URL.rstrip("/")
     sandbox_url = settings.SANDBOX_URL.rstrip("/")
     reranker = settings.RERANKER_URL.rstrip("/")
     checks = [
-        _provider_check("llm", provider.CHAT, "/models"),
-        _provider_check("code_llm", provider.CODE, "/models"),
-        _provider_check("asr", provider.ASR, "/health"),
-        _provider_check("tts", provider.TTS, "/health"),
+        _provider_check("llm", provider.CHAT, "/models", detail),
+        _provider_check("code_llm", provider.CODE, "/models", detail),
+        _provider_check("asr", provider.ASR, "/health", detail),
+        _provider_check("tts", provider.TTS, "/health", detail),
         _check("translate", f"{trans}/health" if trans else ""),
         _check("embeddings", settings.EMBEDDINGS_URL),
         _check("reranker", f"{reranker}/health" if reranker else ""),
@@ -90,7 +102,8 @@ async def check_all() -> dict:
         _check("sandbox", f"{sandbox_url}/health" if sandbox_url else ""),
     ]
     results = dict(await asyncio.gather(*checks))
-    account = await openrouter_account()
-    if account is not None:
-        results["openrouter"] = account
+    if detail:
+        account = await openrouter_account()
+        if account is not None:
+            results["openrouter"] = account
     return results

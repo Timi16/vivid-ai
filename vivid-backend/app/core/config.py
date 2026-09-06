@@ -219,6 +219,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 20
     DEFAULT_CLIENT_ID: str = "vivid_web"
 
+    # Operator view of /v1/health/models and /v1/health/code: which provider
+    # and model serve each role, the OpenRouter balance and key expiry. The
+    # routes are public for the app's sake, so this bearer token gates the
+    # detail. Empty = the detail is never shown. Generate: openssl rand -hex 24
+    HEALTH_TOKEN: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @field_validator("MODEL_PROVIDER", "LLM_PROVIDER", "CODE_LLM_PROVIDER",

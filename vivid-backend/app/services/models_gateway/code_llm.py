@@ -26,8 +26,8 @@ from app.services.models_gateway import http, provider
 log = logging.getLogger("vivid.code_llm")
 
 
-class CodeLLMUnavailable(Exception):
-    pass
+class CodeLLMUnavailable(provider.UpstreamError):
+    public = "The coding model is unavailable right now. Please try again in a moment."
 
 
 _TRANSIENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.RemoteProtocolError,

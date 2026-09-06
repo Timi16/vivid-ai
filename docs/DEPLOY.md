@@ -40,6 +40,8 @@ the stack refuses to start if any of the first five are missing:
 POSTGRES_PASSWORD=
 JWT_SECRET=
 BROWSER_TOKEN=
+# Operator view of /v1/health/models (providers, balance, key expiry).
+HEALTH_TOKEN=
 S3_ACCESS_KEY=
 S3_SECRET_KEY=
 
@@ -172,7 +174,9 @@ cd /opt/vivid
 docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs -f backend
 docker compose -f docker-compose.prod.yml exec postgres psql -U vivid vivid
-curl -s localhost:8000/v1/health/models | python3 -m json.tool   # RunPod services
+curl -s localhost:8000/v1/health/models | python3 -m json.tool   # ok/status per service
+curl -s -H "Authorization: Bearer $HEALTH_TOKEN" \
+  localhost:8000/v1/health/models | python3 -m json.tool          # + provider, model, balance
 ```
 
 ## Failing over to OpenRouter
@@ -190,15 +194,24 @@ then restart the containers that read it:
 ```bash
 cd /opt/vivid
 docker compose -f docker-compose.prod.yml up -d backend worker
-curl -s localhost:8000/v1/health/models | python3 -m json.tool   # each entry reports its provider
-curl -s localhost:8000/v1/health/code | python3 -m json.tool     # tool_calling should be true
+H='Authorization: Bearer '"$HEALTH_TOKEN"
+curl -s -H "$H" localhost:8000/v1/health/models | python3 -m json.tool   # each entry reports its provider
+curl -s -H "$H" localhost:8000/v1/health/code | python3 -m json.tool     # tool_calling should be true
 ```
 
-The first report also carries an `openrouter` entry: the account balance,
-`audio_ready` (OpenRouter serves LLM calls on an empty balance but refuses
-transcription below $0.50, so voice input needs a top-up even when chat
-works), and `key_expires_at` — an outage switch whose key has quietly expired
-is no switch at all.
+With the token, the first report also carries an `openrouter` entry: the
+account balance, `audio_ready` (OpenRouter serves LLM calls on an empty
+balance but refuses transcription below $0.50, so voice input needs a top-up
+even when chat works), and `key_expires_at` — an outage switch whose key has
+quietly expired is no switch at all. Without the token both routes answer
+with ok flags only.
+
+Users cannot tell which way the switch is set. Every adapter separates the
+detail it logs (status codes, the upstream's own words, which host) from the
+`public` line a client is shown, the chat and coder sockets scrub whatever
+they send, message rows expose `vivid-chat` rather than the vendor model,
+and the `/v1` proxy strips the serving host and cost from responses and turns
+account problems on our key (401/402/429) into a plain 503.
 
 What moves: the chat assistant (and its planner and title generation), the
 coding agent behind `/ws/code`, the `/v1` proxy that Vivid Code and the editor

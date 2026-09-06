@@ -22,7 +22,11 @@ from app.services.models_gateway import catalog, proxy
 
 @pytest.fixture(autouse=True)
 def pods(monkeypatch):
-    """A deployment with both pods configured."""
+    """A deployment with both pods configured and the provider switch at
+    its default, whatever the developer's own .env says."""
+    monkeypatch.setattr(settings, "MODEL_PROVIDER", "runpod")
+    for override in ("LLM_PROVIDER", "CODE_LLM_PROVIDER", "ASR_PROVIDER", "TTS_PROVIDER"):
+        monkeypatch.setattr(settings, override, "")
     monkeypatch.setattr(settings, "LLM_BASE_URL", "https://chat.test/v1")
     monkeypatch.setattr(settings, "LLM_MODEL", "vendor/chat-27b")
     monkeypatch.setattr(settings, "CODE_LLM_BASE_URL", "https://coder.test/v1")
@@ -236,11 +240,24 @@ def test_a_stream_that_dies_midway_still_bills_what_it_produced(client, recorded
 def test_usage_is_read_off_the_wire_as_it_streams():
     """StreamedCompletion's own parsing, without an HTTP round trip."""
     streamed = proxy.StreamedCompletion(catalog.resolve("vivid-code"), {})
-    streamed._note_usage('data: {"choices":[{"delta":{"content":"hi"}}]}')
+    line = 'data: {"choices":[{"delta":{"content":"hi"}}]}'
+    assert streamed._pass(line) == line
     assert streamed.usage is None
-    streamed._note_usage('data: {"choices":[],"usage":{"total_tokens":7}}')
+    streamed._pass('data: {"choices":[],"usage":{"total_tokens":7}}')
     assert streamed.usage == {"total_tokens": 7}
-    streamed._note_usage("data: [DONE]")
+    assert streamed._pass("data: [DONE]") == "data: [DONE]"
+    assert streamed._pass(": keep-alive") == ": keep-alive"
+    assert streamed.usage == {"total_tokens": 7}
+
+
+def test_the_stream_drops_what_the_upstream_says_about_itself():
+    """OpenRouter stamps the serving host and the cost on every chunk; a
+    client of `vivid-code` gets neither."""
+    streamed = proxy.StreamedCompletion(catalog.resolve("vivid-code"), {})
+    out = streamed._pass('data: {"id":"gen-1","provider":"Novita","choices":[],'
+                         '"usage":{"total_tokens":7,"cost":0.00001,"is_byok":false}}')
+    assert json.loads(out[5:]) == {"id": "gen-1", "choices": [],
+                                   "usage": {"total_tokens": 7}}
     assert streamed.usage == {"total_tokens": 7}
 
 

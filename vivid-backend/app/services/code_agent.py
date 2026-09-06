@@ -93,8 +93,8 @@ class CodeSession:
             except CodeLLMUnavailable as e:
                 log.warning("coding model unavailable: %s", e)
                 await emit({"type": "error", "code": "model_unavailable",
-                            "message": str(e)})
-                return self._end("error", str(e), step)
+                            "message": e.public})
+                return self._end("error", e.public, step)
 
             if cancelled():
                 return self._end("cancelled", "", step)
@@ -181,7 +181,7 @@ class CodeSession:
                 log.warning("stream broke (attempt %d/%d), restarting turn: %s",
                             attempt, attempts, e)
                 await emit({"type": "retry", "attempt": attempt,
-                            "of": attempts, "reason": str(e),
+                            "of": attempts, "reason": e.public,
                             "discard_text": bool(text_parts)})
                 await asyncio.sleep(_RETRY_BACKOFF * attempt)
 

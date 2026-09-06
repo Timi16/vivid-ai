@@ -176,14 +176,77 @@ def test_unconfigured_pods_name_their_variables(monkeypatch):
 
 
 async def test_an_unconfigured_provider_fails_the_turn_with_the_reason(monkeypatch):
+    """The reason (an env var) is for the log; the client gets the public
+    line, which names nothing."""
     monkeypatch.setattr(settings, "MODEL_PROVIDER", "openrouter")
-    with pytest.raises(llm.LLMUnavailable, match="OPENROUTER_API_KEY"):
+    with pytest.raises(llm.LLMUnavailable, match="OPENROUTER_API_KEY") as e:
         async for _ in llm.stream_chat([{"role": "user", "content": "hi"}], 10):
             pass
-    with pytest.raises(stt.STTUnavailable, match="OPENROUTER_API_KEY"):
+    assert "assistant is unavailable" in e.value.public
+    with pytest.raises(stt.STTUnavailable, match="OPENROUTER_API_KEY") as e:
         await stt.transcribe(b"", "en")
-    with pytest.raises(tts.TTSUnavailable, match="OPENROUTER_API_KEY"):
+    assert "OPENROUTER" not in e.value.public and "type your message" in e.value.public
+    with pytest.raises(tts.TTSUnavailable, match="OPENROUTER_API_KEY") as e:
         await tts.synthesize("hello", "en")
+    assert e.value.public == "Voice playback is unavailable right now."
+
+
+# ------------------------------------------------------------- what users see
+def test_scrub_removes_every_way_of_naming_an_upstream():
+    assert provider.scrub(
+        "Insufficient credits. Add more using https://openrouter.ai/settings/credits"
+    ) == "Insufficient credits. Add more using the model service"
+    assert provider.scrub("OPENROUTER_API_KEY is not set") == "a server setting is not set"
+    assert provider.scrub("cannot reach k59si4uu4h85ky-8000.proxy.runpod.net") == \
+        "cannot reach the model service"
+    assert provider.scrub("OpenRouter routed to vLLM on RunPod") == \
+        "the model service routed to the model service on the model service"
+    # Ordinary words, acronyms and our own codes are left alone.
+    assert provider.scrub("no speech recognised in the audio (JSON, stt_empty)") == \
+        "no speech recognised in the audio (JSON, stt_empty)"
+
+
+def test_public_messages_never_quote_the_upstream():
+    e = llm.LLMUnavailable("LLM returned 402: Insufficient credits, https://openrouter.ai/x")
+    assert provider.public_message(e) == llm.LLMUnavailable.public
+    assert "402" not in e.public and "openrouter" not in e.public.lower()
+    assert provider.public_message(RuntimeError("boom")) == provider.UpstreamError.public
+    assert tts.TTSUnavailable("nothing speakable in the reply",
+                              public="There was nothing to read aloud.").public == \
+        "There was nothing to read aloud."
+
+
+async def test_chat_errors_are_scrubbed_at_the_boundary():
+    from app.services import chat_pipeline
+
+    sent: list[dict] = []
+
+    class Conn:
+        async def send(self, frame):
+            sent.append(frame)
+
+    await chat_pipeline._error(
+        Conn(), "c1", "llm_error",
+        "LLM returned 402: add credit at https://openrouter.ai/settings/credits "
+        "(OPENROUTER_API_KEY, via qwxeep3sudzk43-8002.proxy.runpod.net)")
+    message = sent[0]["message"]
+    assert sent[0]["code"] == "llm_error"
+    assert "openrouter" not in message.lower()
+    assert "runpod" not in message.lower()
+    assert "OPENROUTER_API_KEY" not in message
+
+
+def test_messages_show_the_public_alias_not_the_vendor_model():
+    from datetime import datetime, timezone
+
+    from app.schemas.chat import MessageOut
+
+    out = MessageOut.model_validate({
+        "id": "m1", "chat_id": "c1", "role": "assistant", "content": "hi",
+        "model": "google/gemma-3-27b-it", "tokens_in": 1, "tokens_out": 1,
+        "latency_ms": 5, "created_at": datetime.now(timezone.utc)})
+    assert out.model == "vivid-chat"
+    assert MessageOut.model_validate({**out.model_dump(), "model": None}).model is None
 
 
 def test_health_describes_the_switch_without_the_key(on_openrouter):
@@ -223,7 +286,40 @@ async def test_health_reports_the_openrouter_balance_and_audio_readiness(on_open
 
 async def test_health_says_nothing_about_openrouter_when_nothing_is_routed_there(upstream):
     assert await health.openrouter_account() is None
-    assert "openrouter" not in await health.check_all()
+    assert "openrouter" not in await health.check_all(detail=True)
+
+
+async def test_public_health_hides_the_provider(on_openrouter, upstream):
+    """The web app polls this without a token; ok/status is all it gets."""
+    report = await health.check_all()
+    assert set(report["llm"]) == {"ok", "status"}
+    assert "openrouter" not in report
+    assert "openrouter" not in json.dumps(report).lower()
+
+
+def test_health_detail_needs_the_operator_token(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api.routes import health as health_route
+
+    seen: list[bool] = []
+
+    async def fake_check_all(detail=False):
+        seen.append(detail)
+        return {"llm": {"ok": True, "status": 200}}
+
+    monkeypatch.setattr(health_route.models_health, "check_all", fake_check_all)
+    monkeypatch.setattr(settings, "HEALTH_TOKEN", "ops-secret")
+    app = FastAPI()
+    app.include_router(health_route.router, prefix="/v1")
+    client = TestClient(app)
+    client.get("/v1/health/models")
+    client.get("/v1/health/models", headers={"Authorization": "Bearer wrong"})
+    client.get("/v1/health/models", headers={"Authorization": "Bearer ops-secret"})
+    monkeypatch.setattr(settings, "HEALTH_TOKEN", "")
+    client.get("/v1/health/models", headers={"Authorization": "Bearer "})
+    assert seen == [False, False, True, False]
 
 
 async def test_health_marks_a_rejected_key(on_openrouter, upstream):
@@ -233,8 +329,8 @@ async def test_health_marks_a_rejected_key(on_openrouter, upstream):
     assert account["ok"] is False and account["status"] == 401
 
 
-async def test_check_all_carries_the_account_entry(on_openrouter, upstream):
-    report = await health.check_all()
+async def test_check_all_carries_the_account_entry_for_operators(on_openrouter, upstream):
+    report = await health.check_all(detail=True)
     assert report["llm"]["provider"] == "openrouter"
     assert report["openrouter"]["roles"] == list(provider.ROLES)
     assert "sk-or-test" not in json.dumps(report)
@@ -444,6 +540,43 @@ def test_a_client_cannot_steer_openrouter_routing_through_the_proxy(on_openroute
     payload = proxy.build_payload(
         {"messages": [], "provider": {"order": ["evil-host"]}}, model, stream=False)
     assert payload["provider"] == {"sort": "latency"}
+
+
+async def test_the_proxy_hides_the_serving_host_and_the_cost(on_openrouter, upstream):
+    upstream.reply(httpx.Response(200, json={
+        "id": "gen-1", "provider": "Parasail", "model": "mistralai/devstral-2512",
+        "choices": [{"message": {"content": "ok"}}],
+        "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3,
+                  "cost": 0.0000124, "is_byok": False, "cost_details": {}}}))
+    model = catalog.resolve("vivid-code")
+    result = await proxy.complete(model, proxy.build_payload({"messages": []}, model, False))
+    assert "provider" not in result
+    assert result["usage"] == {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3}
+
+
+async def test_our_account_problems_are_not_the_clients_business(on_openrouter, upstream):
+    """402/429 on OUR key is ours to fix; the client gets 503 and no reason."""
+    for status in (401, 402, 429, 502):
+        upstream.reply(httpx.Response(status, json={"error": {
+            "message": "Insufficient credits. Add more using https://openrouter.ai/settings/credits"}}))
+        model = catalog.resolve("vivid-chat")
+        with pytest.raises(proxy.UpstreamError) as e:
+            await proxy.complete(model, proxy.build_payload({"messages": []}, model, False))
+        assert e.value.status == 503
+        assert "openrouter" not in str(e.value).lower()
+        assert "credits" not in str(e.value).lower()
+
+
+async def test_a_clients_own_mistake_is_relayed_scrubbed(on_openrouter, upstream):
+    upstream.reply(httpx.Response(400, json={"error": {
+        "message": "This endpoint's maximum context length is 262144 tokens; "
+                   "see https://openrouter.ai/docs for limits"}}))
+    model = catalog.resolve("vivid-code")
+    with pytest.raises(proxy.UpstreamError) as e:
+        await proxy.complete(model, proxy.build_payload({"messages": []}, model, False))
+    assert e.value.status == 400
+    assert "maximum context length is 262144 tokens" in str(e.value)
+    assert "openrouter" not in str(e.value).lower()
 
 
 async def test_the_v1_proxy_streams_with_the_key(on_openrouter, upstream):

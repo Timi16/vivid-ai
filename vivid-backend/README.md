@@ -127,11 +127,13 @@ there on reload.
   window), and nothing above `services/models_gateway/provider.py` can tell,
   so no client or frontend change is involved. `LLM_PROVIDER`,
   `CODE_LLM_PROVIDER`, `ASR_PROVIDER` and `TTS_PROVIDER` override it per
-  service. Restart the backend and the worker, then check `/v1/health/models`:
-  every entry reports its `provider`, and an `openrouter` entry shows the
-  balance, `audio_ready` (transcription needs $0.50 on the account) and the
-  key's expiry. Translation for yo/ig stays on its pod and falls back to
-  English while that is down.
+  service. Restart the backend and the worker, then check `/v1/health/models`
+  with `Authorization: Bearer $HEALTH_TOKEN`: every entry reports its
+  `provider`, and an `openrouter` entry shows the balance, `audio_ready`
+  (transcription needs $0.50 on the account) and the key's expiry. Without
+  the token the route is ok flags only, and nothing a user sees — error
+  toasts, message rows, `/v1` responses — names the upstream. Translation
+  for yo/ig stays on its pod and falls back to English while that is down.
 - yo/ig follow the RunPod design: the LLM answers in English, the ASR server's
   `/translate` does the language work, history stores the English turns.
 - TTS routes through the ASR server's `/speak` (keeps its `clean_for_tts`

@@ -6,15 +6,23 @@ is an agent running on someone's laptop and it has its own opinions. What this
 adds over letting that agent reach the pod itself is the part the pod cannot
 do: a Vivid identity on every call, a model alias instead of a vendor string,
 a ceiling on one reply, and a token count that comes back for the ledger.
+
+It also keeps the upstream to itself. A client sees `vivid-code`, an OpenAI
+shaped body and, on failure, either its own mistake or "unavailable"; it does
+not see which host answered, what the call cost us, or that the pods were
+down and OpenRouter took the call.
 """
 import json
+import logging
 from typing import AsyncIterator
 
 import httpx
 
 from app.core.config import settings
-from app.services.models_gateway import http
+from app.services.models_gateway import http, provider
 from app.services.models_gateway.catalog import Model
+
+log = logging.getLogger("vivid.models.proxy")
 
 
 class UpstreamError(Exception):
@@ -36,6 +44,19 @@ _FORWARDED = frozenset({
     "logit_bias", "logprobs", "top_logprobs", "response_format",
     "tools", "tool_choice", "parallel_tool_calls", "user",
 })
+
+#: Upstream statuses that are the client's own doing and whose message is
+#: worth relaying: a malformed body, an unknown model, a prompt over the
+#: context window. Anything else — 401/402/429 on OUR account, 5xx — is our
+#: problem, and the client is told "unavailable" without the reason.
+_CLIENT_FAULT = frozenset({400, 404, 413, 415, 422})
+
+#: Response fields an upstream adds beyond the OpenAI shape and a client may
+#: not see: OpenRouter names the host that served the call and what it cost.
+_PRIVATE_TOP_LEVEL = ("provider",)
+_PRIVATE_USAGE = ("cost", "cost_details", "is_byok")
+
+_UNAVAILABLE = "the model service is unavailable right now; retry shortly"
 
 
 def build_payload(body: dict, model: Model, stream: bool) -> dict:
@@ -66,20 +87,44 @@ def _url(model: Model) -> str:
     return model.endpoint.url()
 
 
+def sanitize(chunk: dict) -> dict:
+    """A completion (or one streamed chunk of one) with the upstream's own
+    additions removed. Mutates and returns `chunk`."""
+    for key in _PRIVATE_TOP_LEVEL:
+        chunk.pop(key, None)
+    usage = chunk.get("usage")
+    if isinstance(usage, dict):
+        for key in _PRIVATE_USAGE:
+            usage.pop(key, None)
+    return chunk
+
+
+def _refusal(body: str, status: int) -> UpstreamError:
+    """What to tell the client about an upstream 4xx/5xx. The detail is
+    logged either way; only a client-fault message is relayed, scrubbed."""
+    message = _upstream_message(body, status)
+    log.warning("upstream refused (%s): %s", status, message)
+    if status in _CLIENT_FAULT:
+        return UpstreamError(provider.scrub(message), status=status)
+    return UpstreamError(_UNAVAILABLE, status=503)
+
+
 async def complete(model: Model, payload: dict) -> dict:
-    """One non-streaming completion, returned as the pod worded it."""
+    """One non-streaming completion, as the upstream worded it minus what
+    the upstream said about itself."""
     try:
         r = await http.client().post(_url(model), json=payload,
                                      headers=model.endpoint.headers)
     except httpx.HTTPError as e:
-        raise UpstreamError(f"the model could not be reached: {e}") from e
+        log.warning("upstream unreachable: %s", str(e) or e.__class__.__name__)
+        raise UpstreamError(_UNAVAILABLE, status=503) from e
     if r.status_code >= 400:
-        raise UpstreamError(_upstream_message(r.text, r.status_code),
-                            status=r.status_code if r.status_code < 500 else 502)
+        raise _refusal(r.text, r.status_code)
     try:
-        return r.json()
+        return sanitize(r.json())
     except json.JSONDecodeError as e:
-        raise UpstreamError(f"the model returned an unreadable response: {e}") from e
+        log.warning("upstream returned unreadable JSON: %s", e)
+        raise UpstreamError(_UNAVAILABLE, status=502) from e
 
 
 class StreamedCompletion:
@@ -89,7 +134,8 @@ class StreamedCompletion:
     Re-reading the body afterwards is not an option — it has already gone to
     the client — and buffering the whole reply to count tokens would undo the
     streaming. So usage is picked out in flight and left on {@link usage} for
-    the caller to record once iteration ends.
+    the caller to record once iteration ends. The same pass strips what the
+    upstream says about itself from every chunk.
     """
 
     def __init__(self, model: Model, payload: dict):
@@ -104,34 +150,38 @@ class StreamedCompletion:
                     headers=self._model.endpoint.headers) as r:
                 if r.status_code >= 400:
                     body = (await r.aread()).decode(errors="replace")
-                    raise UpstreamError(
-                        _upstream_message(body, r.status_code),
-                        status=r.status_code if r.status_code < 500 else 502)
+                    raise _refusal(body, r.status_code)
                 async for line in r.aiter_lines():
                     if not line:
                         continue
-                    self._note_usage(line)
                     # Re-frame rather than forward raw bytes: aiter_lines has
                     # already eaten the delimiters, and one event per `data:`
                     # line is the framing every OpenAI client expects.
-                    yield f"{line}\n\n".encode()
+                    yield f"{self._pass(line)}\n\n".encode()
         except httpx.HTTPError as e:
             # Mid-stream this cannot become a status code — the response has
             # begun — so the route turns it into a terminal error event.
-            raise UpstreamError(f"the model stopped responding: {e}") from e
+            log.warning("upstream stream broke: %s", str(e) or e.__class__.__name__)
+            raise UpstreamError("the model stopped responding") from e
 
-    def _note_usage(self, line: str) -> None:
+    def _pass(self, line: str) -> str:
+        """One SSE line, sanitized, with its usage noted. Lines that are not
+        JSON data (comments, [DONE]) go through untouched."""
         if not line.startswith("data:"):
-            return
+            return line
         data = line[5:].strip()
         if not data or data == "[DONE]":
-            return
+            return line
         try:
             chunk = json.loads(data)
         except json.JSONDecodeError:
-            return
-        if isinstance(chunk, dict) and chunk.get("usage"):
+            return line
+        if not isinstance(chunk, dict):
+            return line
+        sanitize(chunk)
+        if chunk.get("usage"):
             self.usage = chunk["usage"]
+        return f"data: {json.dumps(chunk, separators=(',', ':'))}"
 
 
 def _upstream_message(body: str, status: int) -> str:

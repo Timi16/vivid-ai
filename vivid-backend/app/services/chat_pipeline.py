@@ -33,7 +33,8 @@ from app.db.session import async_session
 from app.services import agent, prompt, rate_limit, storage, websites
 from app.services import connectors as connectors_svc
 from app.services import tools as tools_svc
-from app.services.models_gateway import llm, stt, translate as translate_svc, tts
+from app.services.models_gateway import (llm, provider, stt,
+                                         translate as translate_svc, tts)
 
 log = logging.getLogger("vivid.pipeline")
 
@@ -65,8 +66,11 @@ class Connection:
 
 
 async def _error(conn: Connection, chat_id: str | None, code: str, message: str):
+    """The last stop before a client sees an error. The web app toasts
+    `message` verbatim, so nothing about an upstream may be in it: callers
+    pass an adapter's `public` text, and the scrub catches the rest."""
     await conn.send({"type": "error", "chat_id": chat_id,
-                     "code": code, "message": message})
+                     "code": code, "message": provider.scrub(message)})
 
 
 def _pcm16k_to_wav(pcm: bytes, rate: int = 16000) -> bytes:
@@ -400,11 +404,11 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
             except llm.LLMUnavailable as e2:
                 await _drain_speaker()
                 log.warning("llm failed for chat %s: %s", chat_id, e2)
-                return await _error(conn, chat_id, "llm_error", str(e2))
+                return await _error(conn, chat_id, "llm_error", e2.public)
         else:
             await _drain_speaker()
             log.warning("llm failed for chat %s: %s", chat_id, e)
-            return await _error(conn, chat_id, "llm_error", str(e))
+            return await _error(conn, chat_id, "llm_error", e.public)
 
     await _drain_speaker()
     if _superseded(cancel_event):
@@ -524,7 +528,7 @@ async def _run_text_turn(conn, state, user_id, chat_id, text, attachment_ids,
                                  "data": base64.b64encode(reply_wav).decode()})
             except Exception as e:
                 log.warning("tts failed for chat %s: %s", chat_id, e)
-                await _error(conn, chat_id, "tts_failed", str(e))
+                await _error(conn, chat_id, "tts_failed", provider.public_message(e))
         if reply_wav:
             try:
                 key = f"{user_id}/{chat_id}/{uuid.uuid4()}.wav"
@@ -655,7 +659,8 @@ async def run_transcribe_only(conn: Connection, state, user_id: str,
     try:
         transcript, detected = await stt.transcribe(audio_bytes, requested, mime)
     except stt.STTUnavailable as e:
-        return await _error(conn, chat_id, "stt_failed", str(e))
+        log.warning("stt failed for chat %s: %s", chat_id, e)
+        return await _error(conn, chat_id, "stt_failed", e.public)
     if not transcript:
         return await _error(conn, chat_id, "stt_empty",
                             "no speech recognised in the audio")
@@ -684,7 +689,8 @@ async def run_voice_turn(conn: Connection, state, user_id: str, chat_id: str,
     try:
         transcript, detected = await stt.transcribe(audio_bytes, requested, mime)
     except stt.STTUnavailable as e:
-        return await _error(conn, chat_id, "stt_failed", str(e))
+        log.warning("stt failed for chat %s: %s", chat_id, e)
+        return await _error(conn, chat_id, "stt_failed", e.public)
     timings = {"stt_ms": round((time.monotonic() - stt_started) * 1000)}
     if not transcript:
         return await _error(conn, chat_id, "stt_empty",

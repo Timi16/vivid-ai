@@ -15,12 +15,52 @@ where the finished request is sent and what the model is called there.
 Nothing else in the codebase may look at OPENROUTER_*, LLM_BASE_URL,
 ASR_BASE_URL or TTS_BASE_URL directly.
 """
+import re
 from dataclasses import dataclass
 
 from app.core.config import settings
 
 RUNPOD = "runpod"
 OPENROUTER = "openrouter"
+
+
+class UpstreamError(Exception):
+    """Base for every adapter's failure. Two messages on purpose:
+
+    str(e) is the DETAIL — the status code, the upstream's own words, which
+    host — and is for the log. `public` is the only part a client may see,
+    and never names an upstream: a user of Vivid is not told that Vivid is
+    on OpenRouter this afternoon, and a developer on the /v1 proxy is not
+    handed our billing state. Adapters raise with the detail and override
+    `public` only when they have something safe and useful to say.
+    """
+    public: str = "That didn't work just now. Please try again."
+
+    def __init__(self, detail: str, public: str | None = None):
+        super().__init__(detail)
+        if public is not None:
+            self.public = public
+
+
+def public_message(e: Exception) -> str:
+    """What a client may be told about `e`."""
+    return getattr(e, "public", None) or UpstreamError.public
+
+
+# Belt and braces for the client boundaries: even a message that was never
+# meant to quote an upstream must not carry a host, a vendor or an env var.
+_URL = re.compile(r"https?://[^\s'\"<>)\]]+")
+_HOST = re.compile(r"\b[\w.-]*(?:runpod\.net|openrouter\.ai)\b", re.I)
+_VENDOR = re.compile(r"\b(?:open ?router|runpod|vllm)\b", re.I)
+_ENV_VAR = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b")
+
+
+def scrub(text: str) -> str:
+    """`text` with anything that identifies an upstream replaced."""
+    text = _URL.sub("the model service", text)
+    text = _HOST.sub("the model service", text)
+    text = _VENDOR.sub("the model service", text)
+    return _ENV_VAR.sub("a server setting", text)
 
 #: The assistant's model: chat turns, title generation, the tool planner.
 CHAT = "chat"

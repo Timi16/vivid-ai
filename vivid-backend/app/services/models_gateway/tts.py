@@ -21,8 +21,8 @@ from app.services.tts_text import clean_for_tts
 TRANSLATE_LANGS = {"yo", "ig"}
 
 
-class TTSUnavailable(Exception):
-    pass
+class TTSUnavailable(provider.UpstreamError):
+    public = "Voice playback is unavailable right now."
 
 
 def speak_language(language: str, translated: bool) -> str:
@@ -43,7 +43,8 @@ async def synthesize(text: str, language: str, voice: str | None = None) -> byte
     # or server-side on the pod once TTS_CLEAN_IN_BACKEND is flipped off.
     text = clean_for_tts(text) if settings.TTS_CLEAN_IN_BACKEND else text.strip()
     if not text:
-        raise TTSUnavailable("nothing speakable in the reply")
+        raise TTSUnavailable("nothing speakable in the reply",
+                             public="There was nothing in that reply to read aloud.")
     if ep.is_pod:
         return await _speak_pod(ep, text, language, voice)
     return await _speak_openrouter(ep, text)

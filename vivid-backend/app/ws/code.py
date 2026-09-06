@@ -33,7 +33,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.core.config import settings
 from app.core.security import decode_token
 from app.services.code_agent import CodeSession
-from app.services.models_gateway import code_llm
+from app.services.models_gateway import catalog, code_llm, provider
 
 router = APIRouter()
 log = logging.getLogger("vivid.ws.code")
@@ -60,12 +60,17 @@ async def code_endpoint(ws: WebSocket):
         await ws.close(code=4401)
         return
     if not code_llm.configured():
+        # The env var to set goes to the log; the editor is told only that
+        # there is nothing to talk to.
+        log.error("coding agent not configured: %s", code_llm.missing())
         await ws.send_json({"type": "error", "code": "not_configured",
-                            "message": code_llm.missing()})
+                            "message": "the coding agent is not configured on this deployment"})
         await ws.close(code=1011)
         return
 
-    await ws.send_json({"type": "ready", "model": code_llm.model_name(),
+    # The public alias, never the vendor id: which engine is behind it is
+    # a deployment detail, and it changes when the provider switch flips.
+    await ws.send_json({"type": "ready", "model": catalog.CODE_MODEL_ID,
                         "max_steps": settings.CODE_MAX_STEPS})
 
     session: CodeSession | None = None
@@ -105,7 +110,8 @@ async def code_endpoint(ws: WebSocket):
             raise
         except Exception as e:                       # never kill the socket
             log.exception("coding agent turn failed")
-            await emit({"type": "error", "code": "internal", "message": str(e)})
+            await emit({"type": "error", "code": "internal",
+                        "message": provider.scrub(str(e))})
             await emit({"type": "done", "reason": "error", "summary": "",
                         "steps": 0})
 

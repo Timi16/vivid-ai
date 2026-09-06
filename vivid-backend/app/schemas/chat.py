@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.services.models_gateway.catalog import CHAT_MODEL_ID
 
 
 class ChatCreate(BaseModel):
@@ -65,6 +67,14 @@ class MessageOut(BaseModel):
     used_tools: bool = False
     created_at: datetime
     attachments: list[AttachmentOut] = []
+
+    @field_validator("model")
+    @classmethod
+    def _public_alias(cls, value: str | None) -> str | None:
+        """The row records which vendor model answered (analytics, and it
+        changes when the provider switch flips); a client only ever sees
+        Vivid's own name for the assistant."""
+        return CHAT_MODEL_ID if value else value
 
 
 class SearchResult(BaseModel):

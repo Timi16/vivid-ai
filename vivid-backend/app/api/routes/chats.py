@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,6 +13,7 @@ from app.services import storage
 from app.services.models_gateway import tts
 
 router = APIRouter(prefix="/chats", tags=["chats"])
+log = logging.getLogger("vivid.chats")
 
 
 async def _owned_chat(chat_id: str, user: User, db: AsyncSession) -> Chat:
@@ -119,7 +121,8 @@ async def speak_message(chat_id: str, message_id: str,
         wav = await tts.synthesize(
             msg.content, tts.speak_language(chat.language, translated=True))
     except tts.TTSUnavailable as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        log.warning("speak failed for message %s: %s", message_id, e)
+        raise HTTPException(status_code=503, detail=e.public)
     key = f"{user.id}/{chat_id}/{uuid.uuid4()}.wav"
     await storage.upload(key, wav, "audio/wav")
     att = Attachment(message_id=message_id, chat_id=chat_id, user_id=user.id,

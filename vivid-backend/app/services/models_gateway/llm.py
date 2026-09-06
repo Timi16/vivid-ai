@@ -13,8 +13,8 @@ from app.core.config import settings
 from app.services.models_gateway import http, provider
 
 
-class LLMUnavailable(Exception):
-    pass
+class LLMUnavailable(provider.UpstreamError):
+    public = "The assistant is unavailable right now. Please try again in a moment."
 
 
 # One retry after a short pause: Docker's DNS forwarder and the RunPod proxy
