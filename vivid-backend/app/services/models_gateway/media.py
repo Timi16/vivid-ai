@@ -82,15 +82,21 @@ class MediaRejected(MediaUnavailable):
 #: Substrings that mean "we will never render this prompt", in the wording of
 #: the several upstreams that sit behind the endpoint.
 _REFUSAL = (
-    "sensitive",           # MiniMax: "input text sensitive (1026)"
+    "sensitive",              # MiniMax: "input text sensitive (1026)"
     "content policy",
     "content_policy",
     "moderation",
-    "safety",
-    "prohibited",
-    "violat",              # "violates", "violation"
+    "safety",                 # Gemini: IMAGE_SAFETY
+    "prohibited",             # Gemini: PROHIBITED_CONTENT
+    "recitation",             # Gemini's word for a copyright decline
+    "violat",                 # "violates", "violation"
     "flagged",
     "not allowed",
+    # Gemini's soft decline: it returns 400 with finish reason STOP and no
+    # image rather than saying no outright. Treated as a refusal because the
+    # useful advice is the same either way — rewording is what fixes it, and
+    # "try again later" is what does not.
+    "could not generate",
 )
 
 

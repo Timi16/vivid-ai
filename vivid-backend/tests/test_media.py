@@ -263,3 +263,25 @@ async def test_a_real_outage_still_says_try_again(upstream):
         await media.generate_video("a cat")
     assert not isinstance(e.value, media.MediaRejected)
     assert "try again later" in e.value.public.lower()
+
+
+@pytest.mark.parametrize("reason", [
+    "Gemini could not generate an image (STOP)",   # observed verbatim
+    "finishReason: RECITATION",                    # Gemini's copyright decline
+    "IMAGE_SAFETY",
+    "PROHIBITED_CONTENT",
+])
+def test_gemini_declines_are_refusals_not_outages(reason):
+    """Gemini declines softly — a 400 with finish reason STOP and no image,
+    rather than an explicit policy error — so it needs its own phrasings."""
+    assert media._is_refusal(reason)
+
+
+async def test_refused_image_says_reword(upstream):
+    upstream.reply(httpx.Response(400, json={"error": {
+        "message": "Gemini could not generate an image (STOP)"}}))
+    with pytest.raises(media.MediaUnavailable) as e:
+        await media.generate_image("Marvel Universe")
+    assert isinstance(e.value, media.MediaRejected)
+    assert "reword" in e.value.public.lower()
+    assert "try again later" not in e.value.public.lower()
