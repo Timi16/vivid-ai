@@ -128,10 +128,20 @@ class Settings(BaseSettings):
     # pictures for free: flux.2 klein is about $0.003 an image at 1K; video
     # is priced per clip and the cost is only known when the clip is done.
     # Pick from /models?output_modalities=image and =video.
-    OPENROUTER_IMAGE_MODEL: str = "black-forest-labs/flux.2-klein-4b"
+    # Must be a model OpenRouter actually serves with image output, or every
+    # generate_image call 400s and the user is told "unavailable". The old
+    # default (black-forest-labs/flux.2-klein-4b) is not in their catalogue.
+    # Verified present and the cheapest of the eleven image models.
+    OPENROUTER_IMAGE_MODEL: str = "google/gemini-2.5-flash-image"
     OPENROUTER_IMAGE_RESOLUTION: str = "1K"  # 512 | 1K | 2K | 4K
     OPENROUTER_IMAGE_TIMEOUT: int = 120
-    OPENROUTER_VIDEO_MODEL: str = "google/veo-3.1-fast"
+    # Empty ON PURPOSE. OpenRouter's /videos endpoint is live, but their
+    # catalogue currently lists ZERO models with video output — google/veo-3.1
+    # -fast included — so nothing can serve this. Empty makes
+    # provider.endpoint(VIDEO).configured False, which drops generate_video
+    # out of the planner's tool list entirely: the model never offers a clip
+    # it cannot make. Set this the day a video model appears.
+    OPENROUTER_VIDEO_MODEL: str = ""
     # Clip length ceiling; the model can ask for less. Longer clips cost more
     # and render longer, and a chat turn is waiting.
     OPENROUTER_VIDEO_MAX_SECONDS: int = 5
