@@ -27,6 +27,8 @@ export default function AppLayout() {
             renders its own "New chat" button. */}
         <Drawer.Screen name="index" options={{ title: "Vivid AI" }} />
         <Drawer.Screen name="artifacts" options={{ title: "Artifacts" }} />
+        <Drawer.Screen name="images" options={{ title: "Images" }} />
+        <Drawer.Screen name="videos" options={{ title: "Videos" }} />
         <Drawer.Screen name="history" options={{ title: "History" }} />
         <Drawer.Screen name="settings" options={{ title: "Settings" }} />
         <Drawer.Screen name="notifications" options={{ title: "Notifications" }} />

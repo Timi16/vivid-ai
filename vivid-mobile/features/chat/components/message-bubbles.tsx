@@ -5,6 +5,7 @@ import { Glass } from "@/components/ui/glass";
 import { SpeakerIcon } from "@/components/ui/icons";
 import { Textarea } from "@/components/ui/input";
 import { AppText } from "@/components/ui/text";
+import { VideoPreview } from "@/components/ui/video-preview";
 import { Markdown } from "@/features/chat/components/markdown";
 import { extractHtmlArtifact, type Artifact } from "@/features/chat/lib/artifacts";
 import type { LiveMessage, MessageAttachment } from "@/features/chat/lib/types";
@@ -40,6 +41,25 @@ function AttachedImages({
             resizeMode="cover"
           />
         </Pressable>
+      ))}
+    </>
+  );
+}
+
+// Clips Vivid generated for this reply, playable in place with the platform
+// controls, the same way the web thread shows them.
+function AttachedVideos({ attachments }: { attachments?: MessageAttachment[] }) {
+  const videos = attachments?.filter((a) => a.kind === "video" && a.url) ?? [];
+  if (!videos.length) return null;
+  return (
+    <>
+      {videos.map((a) => (
+        <VideoPreview
+          key={a.id}
+          url={a.url ?? ""}
+          accessibilityLabel={a.filename ?? "video"}
+          style={{ width: 300, height: 180, borderRadius: 12, backgroundColor: "#000" }}
+        />
       ))}
     </>
   );
@@ -147,6 +167,7 @@ export function AssistantBubble({
   return (
     <View style={{ gap: 14 }}>
       <AttachedImages attachments={message.attachments} onView={onViewImage} max={300} />
+      <AttachedVideos attachments={message.attachments} />
       <Markdown onOpenArtifact={onOpenArtifact}>{message.content}</Markdown>
       {files.map((a) => (
         <Glass

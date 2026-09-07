@@ -3,8 +3,10 @@ import {
   ComputerIcon,
   CustomizeIcon,
   HistoryIcon,
+  ImagesIcon,
   SettingsIcon,
   SpacesIcon,
+  VideosIcon,
   type IconComponent,
 } from "@/components/ui/icons";
 import { PREVIEW_FEATURES } from "@/config/env";
@@ -14,6 +16,8 @@ export type AppHref =
   | "/computer"
   | "/spaces"
   | "/artifacts"
+  | "/images"
+  | "/videos"
   | "/customize"
   | "/history"
   | "/settings"
@@ -32,6 +36,13 @@ export interface NavItem {
 // hidden until they are real: a link into "isn't live yet" costs more trust
 // than a missing link. Set EXPO_PUBLIC_PREVIEW_FEATURES=1 to see them.
 export const previewFeatures = PREVIEW_FEATURES;
+
+// What Vivid makes, kept next to New chat and Search at the top of the
+// drawer: these are places to go, not settings. Mirrors the web sidebar.
+export const primaryNav: NavItem[] = [
+  { label: "Images", name: "images", href: "/images", icon: ImagesIcon },
+  { label: "Videos", name: "videos", href: "/videos", icon: VideosIcon },
+];
 
 const secondary: NavItem[] = [
   { label: "Artifacts", name: "artifacts", href: "/artifacts", icon: ArtifactsIcon },

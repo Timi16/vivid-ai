@@ -5,6 +5,8 @@ import { Pressable, ScrollView, View } from "react-native";
 import { setSearchOpen, useSearchOpen } from "@/components/layout/search-state";
 import {
   ArtifactsIcon,
+  ImagesIcon,
+  VideosIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
@@ -51,6 +53,8 @@ export function CommandPalette() {
         icon: ArtifactsIcon,
         run: go(() => router.push("/artifacts")),
       },
+      { id: "images", label: "Images", icon: ImagesIcon, run: go(() => router.push("/images")) },
+      { id: "videos", label: "Videos", icon: VideosIcon, run: go(() => router.push("/videos")) },
       {
         id: "settings",
         label: "Settings",

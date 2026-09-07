@@ -5,7 +5,7 @@ import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountMenu } from "@/components/layout/account-menu";
-import { secondaryNav, type AppHref } from "@/components/layout/nav-items";
+import { primaryNav, secondaryNav, type AppHref } from "@/components/layout/nav-items";
 import { setSearchOpen } from "@/components/layout/search-state";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -102,6 +102,15 @@ export function DrawerContent({ state, navigation }: DrawerContentComponentProps
             setSearchOpen(true);
           }}
         />
+        {primaryNav.map(({ label, name, href, icon }) => (
+          <RailButton
+            key={name}
+            label={label}
+            icon={icon}
+            active={activeName === name}
+            onPress={() => go(href)}
+          />
+        ))}
       </View>
 
       <ScrollView

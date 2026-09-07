@@ -14,9 +14,7 @@
       "bundleIdentifier": "app.vivid.mobile",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Vivid listens when you dictate a message or start a voice call.",
-        "UIBackgroundModes": [
-          "audio"
-        ]
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {

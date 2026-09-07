@@ -11,7 +11,13 @@ function Key({ label }: { label: string }) {
     <Glass
       tier="control"
       radius={7}
-      style={{ height: 24, minWidth: 24, paddingHorizontal: 6, alignItems: "center", justifyContent: "center" }}
+      style={{
+        height: 24,
+        minWidth: 24,
+        paddingHorizontal: 6,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
     >
       <AppText size={11} weight="semibold" tone={0.8}>
         {label}

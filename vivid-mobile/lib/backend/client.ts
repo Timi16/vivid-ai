@@ -168,7 +168,7 @@ export interface ChatOut {
 
 export interface ArtifactOut {
   id: string;
-  kind: "image" | "file";
+  kind: "image" | "video" | "file";
   filename: string | null;
   mime: string;
   size_bytes: number;
@@ -181,7 +181,7 @@ export interface ArtifactOut {
 
 export interface AttachmentOut {
   id: string;
-  kind: "image" | "file" | "audio";
+  kind: "image" | "video" | "file" | "audio";
   filename: string | null;
   mime: string;
   size_bytes: number;

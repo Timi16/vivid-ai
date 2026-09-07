@@ -76,6 +76,35 @@ export function ArtifactsIcon({ size, color }: IconProps) {
   );
 }
 
+export function ImagesIcon({ size, color }: IconProps) {
+  const stroke = useStroke(color);
+  return (
+    <Frame size={size}>
+      <Rect x="4" y="5" width="16" height="14" rx="2.5" stroke={stroke} strokeWidth={strokeWidth} />
+      <Circle cx="9" cy="10" r="1.5" stroke={stroke} strokeWidth={strokeWidth} />
+      <Path d="M4.5 17l4.5-4.5 3 3 3-3.5 4.5 5" stroke={stroke} strokeWidth={strokeWidth} />
+    </Frame>
+  );
+}
+
+export function VideosIcon({ size, color }: IconProps) {
+  const stroke = useStroke(color);
+  return (
+    <Frame size={size}>
+      <Rect
+        x="3.5"
+        y="6"
+        width="12.5"
+        height="12"
+        rx="2.5"
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
+      <Path d="M16 10.5l4.5-2.5v8L16 13.5" stroke={stroke} strokeWidth={strokeWidth} />
+    </Frame>
+  );
+}
+
 export function CustomizeIcon({ size, color }: IconProps) {
   const stroke = useStroke(color);
   return (
@@ -813,10 +842,7 @@ export function KingsChatMark({ size = 17 }: IconProps) {
         d="M3.6 5.2 6.4 8l3.1-3.9a3 3 0 0 1 4.9 0L17.6 8l2.8-2.8c.7-.7 1.8-.1 1.6.9l-1.7 7.6a2 2 0 0 1-2 1.6H5.7a2 2 0 0 1-2-1.6L2 6.1c-.2-1 .9-1.6 1.6-.9Z"
         fill="#F7B500"
       />
-      <Path
-        d="M6.5 18.4h11a5.5 5.5 0 0 1-5.5 3.4 5.5 5.5 0 0 1-5.5-3.4Z"
-        fill="#C98F00"
-      />
+      <Path d="M6.5 18.4h11a5.5 5.5 0 0 1-5.5 3.4 5.5 5.5 0 0 1-5.5-3.4Z" fill="#C98F00" />
     </Frame>
   );
 }

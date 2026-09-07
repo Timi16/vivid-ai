@@ -70,16 +70,21 @@ const svg = (w, h, body) =>
 const files = {
   // Transparent: the splash screen paints the black itself, so the image can
   // scale with the device (imageWidth in app.json).
+  //
+  // "AI" is the same size and weight as "Vivid", in a solid grey, the way the
+  // web launcher sets it. It used to be half the size, a lighter weight and
+  // white at 45% opacity: the translucent edges anti-aliased into the black
+  // and on a phone it read as out of focus next to the crisp wordmark.
   "splash-icon.png": [
-    1600,
+    1660,
     600,
     svg(
-      1600,
+      1660,
       600,
       `
-    ${mark({ cx: 360, cy: 300, width: 300 })}
-    <text x="640" y="392" font-family='${FONT}' font-weight="700" font-size="300" letter-spacing="-8" fill="#ffffff">Vivid</text>
-    <text x="1355" y="392" font-family='${FONT}' font-weight="500" font-size="150" letter-spacing="-2" fill="#ffffff" fill-opacity="0.45">AI</text>`
+    ${mark({ cx: 273, cy: 300, width: 300 })}
+    <text x="533" y="392" font-family='${FONT}' font-weight="700" font-size="300" letter-spacing="-8" fill="#ffffff">Vivid</text>
+    <text x="1298" y="392" font-family='${FONT}' font-weight="700" font-size="300" letter-spacing="-8" fill="#9b9b9b">AI</text>`
     ),
   ],
   "icon.png": [

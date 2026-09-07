@@ -23,12 +23,7 @@ const MARK = {
   kingschat: KingsChatMark,
 };
 
-export function ProviderButton({
-  provider,
-  onPress,
-  disabled,
-  comingSoon,
-}: ProviderButtonProps) {
+export function ProviderButton({ provider, onPress, disabled, comingSoon }: ProviderButtonProps) {
   const Mark = MARK[provider];
   return (
     <Pressable

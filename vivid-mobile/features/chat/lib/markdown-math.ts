@@ -56,7 +56,12 @@ function mathInline(state: StateInline, silent: boolean): boolean {
   return true;
 }
 
-function mathBlock(state: StateBlock, startLine: number, endLine: number, silent: boolean): boolean {
+function mathBlock(
+  state: StateBlock,
+  startLine: number,
+  endLine: number,
+  silent: boolean
+): boolean {
   let pos = state.bMarks[startLine] + state.tShift[startLine];
   let max = state.eMarks[startLine];
   if (pos + 2 > max) return false;

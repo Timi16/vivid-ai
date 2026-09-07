@@ -40,7 +40,11 @@ export function TexMath({ tex, display = false }: MathProps) {
 
   if (display) {
     return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 8 }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingVertical: 8 }}
+      >
         <SvgFromXml xml={svg} />
       </ScrollView>
     );
