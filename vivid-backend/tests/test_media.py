@@ -214,3 +214,52 @@ async def test_image_omits_resolution_when_unset(upstream, monkeypatch):
     upstream.reply(httpx.Response(200, json={"data": [{"b64_json": base64.b64encode(PNG).decode()}]}))
     await media.generate_image("a cat")
     assert "resolution" not in upstream.requests[0]["json"]
+
+
+# ------------------------------------------------------- refusals vs outages
+@pytest.mark.parametrize("reason", [
+    "input new_sensitive, input text sensitive (1026)",   # MiniMax, verbatim
+    "Request violates our content policy",
+    "flagged by moderation",
+    "This prompt is not allowed",
+])
+def test_refusal_wording_is_recognised(reason):
+    assert media._is_refusal(reason)
+
+
+@pytest.mark.parametrize("reason", [
+    "internal server error",
+    "upstream timed out",
+    "insufficient credits",
+    "no reason given",
+])
+def test_ordinary_failures_are_not_refusals(reason):
+    assert not media._is_refusal(reason)
+
+
+async def test_refused_video_says_reword_not_retry(upstream):
+    """A refused prompt fails identically on every retry, so "try again
+    later" is wrong advice. It must also stay a MediaUnavailable so existing
+    handlers keep catching it, and must not name the upstream."""
+    upstream.reply(httpx.Response(202, json={"id": "job-9", "status": "pending"}))
+    upstream.reply(httpx.Response(200, json={
+        "id": "job-9", "status": "failed",
+        "error": "input new_sensitive, input text sensitive (1026)"}))
+    with pytest.raises(media.MediaUnavailable) as e:
+        await media.generate_video("Rick and Morty fighting aliens")
+    assert isinstance(e.value, media.MediaRejected)
+    assert "1026" in str(e.value)                       # detail keeps the code
+    assert "reword" in e.value.public.lower()
+    assert "try again later" not in e.value.public.lower()
+    for leak in ("minimax", "openrouter", "runpod", "http"):
+        assert leak not in e.value.public.lower()
+
+
+async def test_a_real_outage_still_says_try_again(upstream):
+    upstream.reply(httpx.Response(202, json={"id": "job-8", "status": "pending"}))
+    upstream.reply(httpx.Response(200, json={
+        "id": "job-8", "status": "failed", "error": "internal server error"}))
+    with pytest.raises(media.MediaUnavailable) as e:
+        await media.generate_video("a cat")
+    assert not isinstance(e.value, media.MediaRejected)
+    assert "try again later" in e.value.public.lower()

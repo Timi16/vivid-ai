@@ -64,6 +64,41 @@ class MediaUnavailable(provider.UpstreamError):
     public = "Image and video generation is unavailable right now. Please try again later."
 
 
+class MediaRejected(MediaUnavailable):
+    """The upstream refused the PROMPT, not the request.
+
+    A subclass so every existing `except MediaUnavailable` still catches it,
+    but with a public message that tells the truth: "try again later" is
+    actively wrong advice here, because the identical prompt will be refused
+    every time. Naming a copyrighted character is the usual cause — MiniMax
+    answers "input text sensitive (1026)", others word it differently, hence
+    matching on several phrasings rather than one provider's code.
+    """
+    public = ("That description was refused by the generator. Try rewording "
+              "it — descriptions naming real people, brands or copyrighted "
+              "characters are usually rejected.")
+
+
+#: Substrings that mean "we will never render this prompt", in the wording of
+#: the several upstreams that sit behind the endpoint.
+_REFUSAL = (
+    "sensitive",           # MiniMax: "input text sensitive (1026)"
+    "content policy",
+    "content_policy",
+    "moderation",
+    "safety",
+    "prohibited",
+    "violat",              # "violates", "violation"
+    "flagged",
+    "not allowed",
+)
+
+
+def _is_refusal(reason: str) -> bool:
+    low = reason.lower()
+    return any(term in low for term in _REFUSAL)
+
+
 def image_available() -> bool:
     return provider.endpoint(provider.IMAGE).configured
 
@@ -111,8 +146,9 @@ async def generate_image(prompt: str, aspect_ratio: str = "1:1") -> tuple[bytes,
     except httpx.HTTPError as e:
         raise MediaUnavailable(f"image generation failed: {_describe(e)}") from e
     if r.status_code >= 400:
-        raise MediaUnavailable(
-            f"image generation returned {r.status_code}: {_error_text(r)}")
+        reason = _error_text(r)
+        detail = f"image generation returned {r.status_code}: {reason}"
+        raise (MediaRejected if _is_refusal(reason) else MediaUnavailable)(detail)
     try:
         item = (r.json().get("data") or [{}])[0]
     except ValueError as e:
@@ -155,8 +191,9 @@ async def generate_video(prompt: str, seconds: int | None = None,
     status = job.get("status")
     while status != _VIDEO_DONE:
         if status in _VIDEO_DEAD:
-            raise MediaUnavailable(
-                f"video job {job_id} {status}: {job.get('error') or 'no reason given'}")
+            reason = str(job.get("error") or "no reason given")
+            detail = f"video job {job_id} {status}: {reason}"
+            raise (MediaRejected if _is_refusal(reason) else MediaUnavailable)(detail)
         elapsed = int(time.monotonic() - started)
         if elapsed >= settings.OPENROUTER_VIDEO_TIMEOUT:
             raise MediaUnavailable(
