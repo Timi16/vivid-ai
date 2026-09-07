@@ -30,6 +30,29 @@ log = logging.getLogger("vivid.media")
 #: default rather than turned into a 400.
 ASPECT_RATIOS = frozenset({"1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"})
 
+#: Video models are pickier than image ones: veo-3.1-fast takes 16:9 and 9:16
+#: and nothing else, so a 1:1 request that is fine for a picture 400s a clip.
+#: Anything outside this is dropped rather than sent and rejected.
+VIDEO_ASPECT_RATIOS = frozenset({"16:9", "9:16"})
+
+
+def _duration(seconds: int | None) -> int:
+    """Snap a requested length to one the model will actually accept.
+
+    Durations are a DISCRETE set, not a range — 4, 6 or 8 for veo-3.1-fast —
+    and an in-between value is rejected outright rather than rounded. Picks
+    the largest allowed value at or below the request, so asking for 5 gets 4
+    rather than an error.
+    """
+    allowed = sorted(settings.OPENROUTER_VIDEO_DURATIONS or [])
+    ceiling = settings.OPENROUTER_VIDEO_MAX_SECONDS
+    if not allowed:
+        return ceiling
+    want = min(int(seconds or ceiling), ceiling)
+    usable = [d for d in allowed if d <= want]
+    return usable[-1] if usable else allowed[0]
+
+
 _VIDEO_DONE = "completed"
 _VIDEO_DEAD = frozenset({"failed", "cancelled", "expired"})
 
@@ -73,8 +96,12 @@ async def generate_image(prompt: str, aspect_ratio: str = "1:1") -> tuple[bytes,
         "prompt": prompt,
         "n": 1,
         "output_format": "png",
-        "resolution": settings.OPENROUTER_IMAGE_RESOLUTION,
     }
+    # Only when set. OpenRouter rejects the whole request for a parameter the
+    # chosen model does not declare, and most image models — including the
+    # default — have no `resolution` at all.
+    if settings.OPENROUTER_IMAGE_RESOLUTION:
+        payload["resolution"] = settings.OPENROUTER_IMAGE_RESOLUTION
     if aspect_ratio in ASPECT_RATIOS:
         payload["aspect_ratio"] = aspect_ratio
     try:
@@ -104,13 +131,12 @@ async def generate_video(prompt: str, seconds: int | None = None,
     ep = provider.endpoint(provider.VIDEO)
     if not ep.configured:
         raise MediaUnavailable(ep.missing)
-    ceiling = settings.OPENROUTER_VIDEO_MAX_SECONDS
     payload = {
         "model": ep.model,
         "prompt": prompt,
-        "duration": min(max(int(seconds or ceiling), 1), ceiling),
+        "duration": _duration(seconds),
     }
-    if aspect_ratio in ASPECT_RATIOS:
+    if aspect_ratio in VIDEO_ASPECT_RATIOS:
         payload["aspect_ratio"] = aspect_ratio
 
     try:

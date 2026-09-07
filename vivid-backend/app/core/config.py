@@ -128,23 +128,23 @@ class Settings(BaseSettings):
     # pictures for free: flux.2 klein is about $0.003 an image at 1K; video
     # is priced per clip and the cost is only known when the clip is done.
     # Pick from /models?output_modalities=image and =video.
-    # Must be a model OpenRouter actually serves with image output, or every
-    # generate_image call 400s and the user is told "unavailable". The old
-    # default (black-forest-labs/flux.2-klein-4b) is not in their catalogue.
-    # Verified present and the cheapest of the eleven image models.
-    OPENROUTER_IMAGE_MODEL: str = "google/gemini-2.5-flash-image"
-    OPENROUTER_IMAGE_RESOLUTION: str = "1K"  # 512 | 1K | 2K | 4K
+    OPENROUTER_IMAGE_MODEL: str = "black-forest-labs/flux.2-klein-4b"
+    # EMPTY by default and only sent when set. Most image models — the
+    # default flux.2-klein-4b included — do not accept a `resolution`
+    # parameter at all, and OpenRouter 400s the whole request for an
+    # unsupported field. Check /api/v1/images/models for a model's
+    # supported_parameters before setting this.
+    OPENROUTER_IMAGE_RESOLUTION: str = ""  # e.g. 512 | 1K | 2K | 4K, model permitting
     OPENROUTER_IMAGE_TIMEOUT: int = 120
-    # Empty ON PURPOSE. OpenRouter's /videos endpoint is live, but their
-    # catalogue currently lists ZERO models with video output — google/veo-3.1
-    # -fast included — so nothing can serve this. Empty makes
-    # provider.endpoint(VIDEO).configured False, which drops generate_video
-    # out of the planner's tool list entirely: the model never offers a clip
-    # it cannot make. Set this the day a video model appears.
-    OPENROUTER_VIDEO_MODEL: str = ""
+    OPENROUTER_VIDEO_MODEL: str = "google/veo-3.1-fast"
     # Clip length ceiling; the model can ask for less. Longer clips cost more
     # and render longer, and a chat turn is waiting.
-    OPENROUTER_VIDEO_MAX_SECONDS: int = 5
+    # Video models take DISCRETE durations, not a range: veo-3.1-fast accepts
+    # 4, 6 or 8 and rejects anything else. The old default of 5 was therefore
+    # never valid and 400d every call. Requests are snapped to the nearest
+    # allowed value at or below the ceiling.
+    OPENROUTER_VIDEO_DURATIONS: list[int] = [4, 6, 8]
+    OPENROUTER_VIDEO_MAX_SECONDS: int = 8
     # A clip renders asynchronously for minutes. The turn polls this often and
     # gives up after this long, so a stuck job cannot hold a user's only
     # generation slot forever.

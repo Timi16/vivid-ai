@@ -23,7 +23,8 @@ def account(monkeypatch):
     monkeypatch.setattr(settings, "OPENROUTER_IMAGE_MODEL", "black-forest-labs/flux.2-klein-4b")
     monkeypatch.setattr(settings, "OPENROUTER_IMAGE_RESOLUTION", "1K")
     monkeypatch.setattr(settings, "OPENROUTER_VIDEO_MODEL", "google/veo-3.1-fast")
-    monkeypatch.setattr(settings, "OPENROUTER_VIDEO_MAX_SECONDS", 5)
+    monkeypatch.setattr(settings, "OPENROUTER_VIDEO_MAX_SECONDS", 6)
+    monkeypatch.setattr(settings, "OPENROUTER_VIDEO_DURATIONS", [4, 6, 8])
     monkeypatch.setattr(settings, "OPENROUTER_VIDEO_POLL_SECONDS", 0)
     monkeypatch.setattr(settings, "OPENROUTER_VIDEO_TIMEOUT", 300)
 
@@ -126,9 +127,10 @@ async def test_generate_video_submits_polls_and_downloads(upstream):
     assert (data, mime) == (b"MP4BYTES", "video/mp4")
     assert [r["method"] + " " + r["url"].rsplit("/api/v1", 1)[1] for r in upstream.requests] == [
         "POST /videos", "GET /videos/job-1", "GET /videos/job-1", "GET /videos/job-1/content"]
-    # Nine seconds asked, five allowed.
+    # Nine seconds asked, ceiling is 6, and durations are a discrete set —
+    # so 6, not 9 and not some in-between value the model would reject.
     assert upstream.requests[0]["json"] == {"model": "google/veo-3.1-fast",
-                                            "prompt": "a cat running", "duration": 5,
+                                            "prompt": "a cat running", "duration": 6,
                                             "aspect_ratio": "16:9"}
     assert len(progress) == 2 and progress[0].startswith("Rendering the video")
 
@@ -187,3 +189,28 @@ def test_tool_files_are_filed_by_kind():
     assert _attachment_kind("image/png") == "image"
     assert _attachment_kind("video/mp4") == "video"
     assert _attachment_kind("application/pdf") == "file"
+
+
+@pytest.mark.parametrize("asked,sent", [
+    (None, 6),   # no request -> the ceiling, which must itself be allowed
+    (5, 4),      # between allowed values -> down, never an invalid in-between
+    (4, 4),
+    (6, 6),
+    (99, 6),     # above the ceiling -> clamped to it
+    (1, 4),      # below every allowed value -> the smallest that exists
+])
+def test_video_duration_snaps_to_an_allowed_value(upstream, asked, sent):
+    """veo-3.1-fast accepts 4, 6 or 8 and 400s anything else. The old code
+    sent min(max(asked,1),ceiling), so a ceiling of 5 produced 5 — a value no
+    model accepts, which is why every clip failed."""
+    assert media._duration(asked) == sent
+    assert media._duration(asked) in settings.OPENROUTER_VIDEO_DURATIONS
+
+
+async def test_image_omits_resolution_when_unset(upstream, monkeypatch):
+    """Most image models declare no `resolution` parameter, and OpenRouter
+    rejects the whole request for an unsupported field."""
+    monkeypatch.setattr(settings, "OPENROUTER_IMAGE_RESOLUTION", "")
+    upstream.reply(httpx.Response(200, json={"data": [{"b64_json": base64.b64encode(PNG).decode()}]}))
+    await media.generate_image("a cat")
+    assert "resolution" not in upstream.requests[0]["json"]
