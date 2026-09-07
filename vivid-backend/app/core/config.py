@@ -44,6 +44,30 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET: str = "vivid"
     MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024
+    # Which storage backend serves attachments: "s3" (MinIO, or real S3) or
+    # "cloudinary". Cloudinary puts a CDN in front, which is the reason to
+    # move: MinIO answers every image from the one VPS with nothing cached in
+    # front of it. Switching does NOT move existing objects.
+    STORAGE_DRIVER: str = "s3"
+    # Was hardcoded. Real S3 and DO Spaces need their actual region; MinIO and
+    # R2 ignore it, so the old constant worked by luck rather than design.
+    S3_REGION: str = "us-east-1"
+
+    # --- Cloudinary (STORAGE_DRIVER=cloudinary) --------------------------
+    # Secrets, so they belong in app.env and never in git.
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+    # Keeps Vivid's objects out of anything else the account holds.
+    CLOUDINARY_FOLDER: str = "vivid"
+    # Where the browser fetches from. Empty means res.cloudinary.com direct;
+    # set it to a CDN host pointed at res.cloudinary.com as origin, and only
+    # this line changes if the CDN does. Include the cloud name, exclude the
+    # resource type — the driver appends /image/upload/... itself:
+    #   direct:  https://res.cloudinary.com/<cloud-name>
+    #   Fastly:  https://cdn.example.com/<cloud-name>
+    CLOUDINARY_MEDIA_BASE_URL: str = ""
+    CLOUDINARY_TIMEOUT: int = 60
 
     # --- Model provider switch ------------------------------------------
     # The one knob to flip when the GPUs are down. "runpod" (default) sends
