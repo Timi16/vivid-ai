@@ -16,6 +16,7 @@ it could not check rather than inventing an answer.
 """
 import ast
 import json
+import logging
 import operator
 import re
 import uuid
@@ -28,6 +29,8 @@ from app.core.config import settings
 from app.services import search
 from app.services.models_gateway import http, media
 from app.services.vivid_tools import call as _vt
+
+log = logging.getLogger("vivid.tools")
 
 _HEADERS = {"User-Agent": "VividAI-backend/0.1"}
 
@@ -90,6 +93,9 @@ async def run_tool(t: Tool, args: dict, ctx: ToolContext | None = None) -> str:
             return await t.fn(args or {}, ctx or ToolContext())
         return await t.fn(args or {})
     except Exception as e:
+        # Logged as well as returned: the model sees this string, but a
+        # failing tool should not be invisible to whoever runs the service.
+        log.warning("tool %s failed: %s: %s", t.name, type(e).__name__, e)
         return f"error: {type(e).__name__}: {e}"
 
 
@@ -402,6 +408,11 @@ async def tool_generate_image(args: dict, ctx: ToolContext) -> str:
         data, mime = await media.generate_image(
             prompt, str(args.get("aspect_ratio") or "1:1"))
     except media.MediaUnavailable as e:
+        # str(e) carries the upstream's own words — the status code, the
+        # rejected parameter, the content-policy refusal. Only e.public may
+        # reach the user, but dropping the detail entirely makes every
+        # different failure look identical in the log.
+        log.warning("generate_image failed: %s", e)
         return f"error: {e.public}"
     name = _media_name(ctx, "image", mime)
     ctx.outputs.append({"name": name, "mime": mime, "data": data})
@@ -432,6 +443,7 @@ async def tool_generate_video(args: dict, ctx: ToolContext) -> str:
             prompt, seconds, str(args.get("aspect_ratio") or "16:9"),
             on_status=ctx.status)
     except media.MediaUnavailable as e:
+        log.warning("generate_video failed: %s", e)
         return f"error: {e.public}"
     name = _media_name(ctx, "video", mime)
     ctx.outputs.append({"name": name, "mime": mime, "data": data})
