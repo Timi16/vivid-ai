@@ -97,6 +97,40 @@ class ApiKey(Base):
         DateTime(timezone=True), default=None)
 
 
+class MediaJob(Base):
+    """One video render a partner started through the API.
+
+    Video takes minutes, so `POST /videos` returns immediately and the caller
+    polls. All this row holds is the mapping from the id we handed out to the
+    upstream job id, plus where it got to: the render itself lives upstream,
+    so a backend restart loses nothing and there is no worker to run.
+
+    Rows are kept after completion because `GET /videos/{id}` has to keep
+    answering, and because "what did this account generate" is a billing
+    question.
+    """
+    __tablename__ = "media_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="video")
+    #: pending | completed | failed. Mirrors what the upstream last said.
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    #: The upstream's own job id, which is what gets polled.
+    upstream_id: Mapped[str] = mapped_column(String(128), index=True)
+    prompt: Mapped[str] = mapped_column(Text)
+    #: Set once the clip has been fetched and stored, so a second poll after
+    #: completion returns the same file instead of downloading it again.
+    attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("attachments.id", ondelete="SET NULL"), default=None)
+    #: Why it failed, in the words a caller may see.
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now)
+
+
 class Chat(Base):
     __tablename__ = "chats"
 

@@ -80,6 +80,13 @@ API_TAGS = [
     {"name": "api keys",
      "description": "Generate and revoke the credentials for everything below. "
                     "Session-only: an API key cannot call these."},
+    {"name": "generation",
+     "description": "Make an image, a video clip or speech from a prompt, and "
+                    "turn speech back into text. Video renders in the "
+                    "background: POST returns a job id to poll."},
+    {"name": "tools",
+     "description": "The assistant's own tools, callable directly: web search, "
+                    "code execution, browsing, weather, exchange rates."},
     {"name": "chats", "description": "Conversations and their messages."},
     {"name": "models",
      "description": "OpenAI-compatible chat completions, for tools that "

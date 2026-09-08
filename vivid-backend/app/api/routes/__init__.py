@@ -9,7 +9,9 @@ from app.api.routes.completions import router as completions_router
 from app.api.routes.connectors import router as connectors_router
 from app.api.routes.health import router as health_router
 from app.api.routes.keys import router as keys_router
+from app.api.routes.media import router as media_router
 from app.api.routes.search import router as search_router
+from app.api.routes.tools import router as tools_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -22,3 +24,5 @@ api_router.include_router(artifacts_router)
 api_router.include_router(browser_router)
 api_router.include_router(connectors_router)
 api_router.include_router(search_router)
+api_router.include_router(media_router)
+api_router.include_router(tools_router)

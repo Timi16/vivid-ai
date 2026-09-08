@@ -273,6 +273,14 @@ class Settings(BaseSettings):
     # unbounded list is how a compromised session mints keys unnoticed.
     API_KEYS_PER_USER: int = 10
 
+    # Generation and tool calls through the API, per credential per minute.
+    # Their own buckets because they are priced per call by an upstream, where
+    # a chat turn is one request no matter how much it does. Low on purpose:
+    # a partner asking for more is a conversation, a runaway loop billing us
+    # for a thousand images is not.
+    GENERATION_RATE_LIMIT_PER_MINUTE: int = 20
+    TOOL_RATE_LIMIT_PER_MINUTE: int = 60
+
     # Limits
     RATE_LIMIT_PER_MINUTE: int = 20
     DEFAULT_CLIENT_ID: str = "vivid_web"

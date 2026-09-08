@@ -43,6 +43,9 @@ GET  /chats/:id/messages   DELETE /chats/:id
 POST /attachments          GET  /attachments/:id
 GET  /search?q=
 POST /keys                 GET  /keys              DELETE /keys/:id
+POST /images/generations   POST /videos            GET  /videos/:id
+POST /audio/speech         POST /audio/transcriptions
+GET  /tools                POST /tools/:name
 GET  /health               GET  /health/models
 ```
 
@@ -80,6 +83,45 @@ still there for a key that should not belong to any account:
 ```bash
 python -m app.scripts.create_api_key "Acme browsing" --max-sessions 5
 ```
+
+## Generation and tools over HTTP
+
+The apps reach image, video, voice and tools through the chat pipeline, where
+the model decides to call a tool. A partner has no model in the loop and no
+websocket, so the same capabilities are exposed directly. Shapes follow
+OpenAI's where one exists, for the same reason `/chat/completions` does.
+
+```
+POST /images/generations    prompt -> a stored image (url, or b64_json)
+POST /videos                prompt -> 202 {id, status}; renders in the background
+GET  /videos/:id            poll until status leaves "pending"; the clip arrives here
+POST /audio/speech          text -> audio/wav, or a stored url
+POST /audio/transcriptions  multipart audio -> {text, language}
+GET  /tools                 what this deployment can run right now
+POST /tools/:name           run one; returns the observation and any files it made
+```
+
+Everything generated is stored as an attachment, the same record the chat path
+writes, so a file made through the API appears in `/artifacts` beside the rest.
+It belongs to the caller rather than to a chat, which is why
+`attachments.chat_id` is nullable.
+
+**Video is a job, everything else answers directly.** A clip takes minutes,
+which no proxy will hold open. Nothing renders on our side: `POST /videos`
+forwards to the upstream and stores the mapping, and the caller's poll is what
+asks upstream how it is going. So there is no worker to run and a backend
+restart loses nothing. The first poll that finds it finished downloads and
+stores the clip; later polls return that same file.
+
+**A failed tool is a 200.** The assistant reads a failure as an observation and
+recovers from it, and a caller running its own loop needs the same thing. A
+tool that does not exist here is a 404, because that is the caller getting the
+name wrong. `GET /tools` is shorter when a service is unconfigured, so read it
+rather than hard-coding names.
+
+`GENERATION_RATE_LIMIT_PER_MINUTE` and `TOOL_RATE_LIMIT_PER_MINUTE` are their
+own buckets, separate from the chat limit: these are priced per call by an
+upstream, where a chat turn is one request no matter how much it does.
 
 ## Partner browsing (`/v1/browser`)
 
