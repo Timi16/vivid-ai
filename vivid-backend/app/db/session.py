@@ -29,6 +29,14 @@ async def init_db() -> None:
                 f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {column}"))
         await conn.execute(text(
             "ALTER TABLE chats ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE"))
+        # Self-serve keys record who generated them. Existing partner keys
+        # keep a null owner: they were minted from the CLI by nobody.
+        await conn.execute(text(
+            "ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS "
+            "owner_user_id VARCHAR(36) REFERENCES users(id) ON DELETE CASCADE"))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_api_keys_owner_user_id "
+            "ON api_keys (owner_user_id)"))
 
     async with async_session() as db:
         # Prompts are product config and deploy with the backend: upsert so a

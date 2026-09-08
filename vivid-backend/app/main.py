@@ -40,7 +40,63 @@ async def lifespan(app: FastAPI):
     await app.state.redis.aclose()
 
 
+#: Shown above the endpoint list in Swagger UI at /docs. This page is the
+#: whole documentation set for a partner: they arrive with a key and no
+#: context, so the two things that are not guessable from the route list —
+#: how to authenticate, and that a key is its own tenant — are said here.
+API_DESCRIPTION = """
+The Vivid API. Everything the Vivid apps do — chat, voice, files, search,
+browsing, model access — over the same endpoints they use.
+
+### Authenticating
+
+Generate a key in the Vivid web app under **Settings → Developer**, then send
+it as a bearer token:
+
+```
+Authorization: Bearer vivid_xxxxxxxxxxxxxxxxxxxx
+```
+
+Press **Authorize** above to try requests from this page.
+
+The secret is shown once, when the key is generated, and is stored only as a
+hash. If it is lost, revoke that key and generate another.
+
+### What a key can reach
+
+Every `/v1` endpoint below, except key management itself: creating, listing
+and revoking keys needs a signed-in session, so a leaked key cannot mint a
+replacement for itself.
+
+A key is its own tenant. The chats, attachments and browser sessions it
+creates belong to the key, not to the account that generated it, and they are
+not visible in that person's Vivid app. Revoking a key leaves other keys
+untouched.
+"""
+
+#: Order and prose for the groups in Swagger UI. Without this the tags appear
+#: in whatever order the routers were included, unlabelled.
+API_TAGS = [
+    {"name": "api keys",
+     "description": "Generate and revoke the credentials for everything below. "
+                    "Session-only: an API key cannot call these."},
+    {"name": "chats", "description": "Conversations and their messages."},
+    {"name": "models",
+     "description": "OpenAI-compatible chat completions, for tools that "
+                    "already speak that shape."},
+    {"name": "attachments", "description": "Upload files and fetch them back."},
+    {"name": "artifacts", "description": "Files, images and video Vivid generated."},
+    {"name": "search", "description": "Search across this account's messages."},
+    {"name": "browser",
+     "description": "Drive a real browser: open a session, navigate, read the "
+                    "page, act on it."},
+    {"name": "connectors", "description": "Third-party accounts linked to this one."},
+    {"name": "auth", "description": "Sign-in for the Vivid apps."},
+    {"name": "health", "description": "Liveness and model-service reachability."},
+]
+
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION,
+              description=API_DESCRIPTION, openapi_tags=API_TAGS,
               lifespan=lifespan)
 
 # One error shape for every route, plus a request id on every response.

@@ -268,6 +268,11 @@ class Settings(BaseSettings):
     # chat turn makes one.
     MODEL_PROXY_RATE_LIMIT_PER_MINUTE: int = 120
 
+    # Live API keys one account may hold. A ceiling, not a quota: a developer
+    # needs a handful (per environment, plus one being rotated in), and an
+    # unbounded list is how a compromised session mints keys unnoticed.
+    API_KEYS_PER_USER: int = 10
+
     # Limits
     RATE_LIMIT_PER_MINUTE: int = 20
     DEFAULT_CLIENT_ID: str = "vivid_web"

@@ -7,12 +7,19 @@ import jwt
 
 from app.core.config import settings
 
-# Partner API keys. `vk_` makes a leaked key greppable in logs and scannable by
-# secret-detection tooling; the random half is 32 bytes of urandom.
-API_KEY_PREFIX = "vk_"
+# Developer API keys. The prefix makes a leaked key greppable in logs and
+# scannable by secret-detection tooling; the random half is 32 bytes of
+# urandom.
+API_KEY_PREFIX = "vivid_"
+#: `vk_` was the prefix before self-serve keys existed. Keys already issued to
+#: partners are still valid, so both are accepted on the way in and only the
+#: current one is ever minted.
+LEGACY_KEY_PREFIXES = ("vk_",)
 API_KEY_BYTES = 32
-#: Characters of the key kept in the clear, for "which key is this?".
-API_KEY_VISIBLE = 11
+#: Characters of the key kept in the clear, for "which key is this?". Long
+#: enough to be distinctive after the prefix, short enough to be useless to
+#: anyone who sees it.
+API_KEY_VISIBLE = len(API_KEY_PREFIX) + 8
 
 
 def generate_api_key() -> tuple[str, str, str]:
@@ -31,7 +38,10 @@ def hash_api_key(key: str) -> str:
 
 
 def looks_like_api_key(credential: str) -> bool:
-    return credential.startswith(API_KEY_PREFIX)
+    """Is this an API key rather than a JWT? Decides which table the
+    credential is looked up in, nothing more — an unknown key still fails
+    authentication."""
+    return credential.startswith((API_KEY_PREFIX, *LEGACY_KEY_PREFIXES))
 
 
 def hash_password(password: str) -> str:

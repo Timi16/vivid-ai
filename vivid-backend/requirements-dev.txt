@@ -3,3 +3,7 @@ pytest>=8
 pytest-asyncio>=0.24
 # The SDK contract tests import vivid_ai; install it editable from the repo:
 #   pip install -e ../sdk/python
+
+# The API-key routes are tested against a real (in-memory) database rather
+# than a stubbed session: ownership scoping and uniqueness are the point.
+aiosqlite>=0.20

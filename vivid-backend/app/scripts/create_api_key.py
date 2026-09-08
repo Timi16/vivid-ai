@@ -1,7 +1,13 @@
-"""Mint a partner API key.
+"""Mint a partner API key from the command line.
 
     docker compose exec backend python -m app.scripts.create_api_key "Acme" \
         --client vivid_web --max-sessions 5
+
+Most keys are not minted here. Anyone with an account generates their own in
+Settings → Developer, which is the same thing with an owner attached (see
+`api/routes/keys.py`). This script stays for the case that flow cannot serve:
+a key that belongs to no account, or one that needs a non-default client row
+or session quota.
 
 Prints the key once. It is stored only as a SHA-256 hash, so a lost key cannot
 be recovered — mint a new one and revoke the old.

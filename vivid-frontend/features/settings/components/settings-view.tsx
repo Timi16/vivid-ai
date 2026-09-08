@@ -4,6 +4,7 @@ import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from "@/components/
 import { PageHeader } from "@/components/layout/page-header";
 import { AccountPanel } from "@/features/settings/components/account-panel";
 import { AppearancePanel } from "@/features/settings/components/appearance-panel";
+import { DeveloperPanel } from "@/features/settings/components/developer-panel";
 import { LanguagePanel } from "@/features/settings/components/language-panel";
 import { NotificationsPanel } from "@/features/settings/components/notifications-panel";
 import { ShortcutsPanel } from "@/features/settings/components/shortcuts-panel";
@@ -15,6 +16,7 @@ const TABS = [
   { value: "notifications", label: "Notifications" },
   { value: "language", label: "Language" },
   { value: "shortcuts", label: "Shortcuts" },
+  { value: "developer", label: "Developer" },
 ];
 
 interface SettingsViewProps {
@@ -25,9 +27,7 @@ interface SettingsViewProps {
   systemSlot?: React.ReactNode;
 }
 
-export function SettingsView({ plan, planActionSlot,
-  systemSlot,
-}: SettingsViewProps) {
+export function SettingsView({ plan, planActionSlot, systemSlot }: SettingsViewProps) {
   const { data: me } = useMe();
   const name = displayName(me);
   const email = displayEmail(me);
@@ -66,6 +66,9 @@ export function SettingsView({ plan, planActionSlot,
         </TabsPanel>
         <TabsPanel value="shortcuts" className="mt-6">
           <ShortcutsPanel />
+        </TabsPanel>
+        <TabsPanel value="developer" className="mt-6">
+          <DeveloperPanel />
         </TabsPanel>
       </Tabs>
     </div>

@@ -115,3 +115,19 @@ async def get_current_user(
     its service-account user, so ownership checks work unchanged.
     """
     return principal.user
+
+
+async def get_session_user(
+        principal: Principal = Depends(get_principal)) -> User:
+    """The signed-in human, and only them: an API key is refused here.
+
+    Key management is the one place where "authenticated" is not enough. A key
+    that could mint more keys would survive its own revocation — the holder
+    just issues a replacement first — so creating, listing and revoking keys
+    all require the session a person got by signing in.
+    """
+    if principal.is_partner:
+        raise APIError(403, "session_required",
+                       "This endpoint needs a signed-in session; an API key "
+                       "cannot manage API keys.")
+    return principal.user

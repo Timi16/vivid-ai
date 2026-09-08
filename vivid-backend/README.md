@@ -42,17 +42,46 @@ GET  /chats                POST /chats
 GET  /chats/:id/messages   DELETE /chats/:id
 POST /attachments          GET  /attachments/:id
 GET  /search?q=
+POST /keys                 GET  /keys              DELETE /keys/:id
 GET  /health               GET  /health/models
 ```
 
-## Partner API (`/v1/browser`)
+## Developer API keys
 
-Authenticated by API key (`Authorization: Bearer vk_...`), which resolves
-beside the user-token path in `api/deps.py`. Mint one with:
+Anyone building on Vivid generates their own key in the web app under
+**Settings → Developer**, and reads the endpoint list at `/docs` (Swagger UI,
+generated from the routes so it cannot drift). A key is sent as
+`Authorization: Bearer vivid_...` and resolves beside the user-token path in
+`api/deps.py`, so it works on every `/v1` endpoint the apps use.
+
+```
+POST   /keys        generate; the secret is in this response and nowhere else
+GET    /keys        this account's keys, secrets excluded
+DELETE /keys/:id    revoke (idempotent)
+```
+
+Three rules hold the design together:
+
+- **A key acts as its own service account, never as the person who made it.**
+  The chats, attachments and browser sessions it creates belong to the key, so
+  a partner's traffic never lands in the developer's own sidebar and revoking
+  one key cannot touch another's data. `api_keys.owner_user_id` records the
+  human, and is what `/keys` scopes to.
+- **A key cannot manage keys.** Those three routes take `get_session_user`,
+  which refuses an API key. Otherwise a leaked key would outlive its own
+  revocation: the holder would mint a replacement first.
+- **Only the SHA-256 hash is stored**, so a lost key is unrecoverable by
+  anyone, us included. Revoke it and generate another.
+
+Keys minted before this flow existed carry the `vk_` prefix and a null owner.
+They still authenticate; only the current prefix is ever issued. The CLI is
+still there for a key that should not belong to any account:
 
 ```bash
 python -m app.scripts.create_api_key "Acme browsing" --max-sessions 5
 ```
+
+## Partner browsing (`/v1/browser`)
 
 ```
 POST   /browser/sessions            open (optionally authenticated + scoped)

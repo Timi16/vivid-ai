@@ -60,6 +60,13 @@ class ApiKey(Base):
     the alternative was a nullable FK on five tables and an `or` in every
     query.
 
+    Two people are recorded, and they are deliberately not the same one.
+    `user_id` is the service account the key acts as, so a partner's chats and
+    files never appear in anyone's own sidebar. `owner_user_id` is the human
+    who generated it in Settings and is the only one who may list or revoke
+    it. Keys minted by the CLI before self-serve existed have no owner, which
+    is why the column is nullable: nobody signed in to create them.
+
     Only the hash is stored. Keys are 32 bytes of urandom, so SHA-256 is the
     right primitive: bcrypt exists to slow down guessing low-entropy
     passwords, and paying its cost on every single API request would be a
@@ -72,6 +79,9 @@ class ApiKey(Base):
         ForeignKey("clients.id"), default=settings.DEFAULT_CLIENT_ID)
     user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    #: The human who generated this key. Null for CLI-minted partner keys.
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, default=None)
     name: Mapped[str] = mapped_column(String(128))
     # The visible half, for "which key is this?" without revealing the secret.
     prefix: Mapped[str] = mapped_column(String(24), index=True)

@@ -135,6 +135,22 @@ export interface AttachmentOut {
   url?: string | null;
 }
 
+export interface ApiKeyOut {
+  id: string;
+  name: string;
+  // The visible head of the key, e.g. "vivid_A1b2C3d4". Enough to match a key
+  // against the one in a config file, useless to anyone who reads it.
+  prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+// The create response, and the only time the secret is ever returned.
+export interface ApiKeyCreated extends ApiKeyOut {
+  key: string;
+}
+
 export interface MessageOut {
   id: string;
   chat_id: string;
@@ -163,6 +179,12 @@ export const backend = {
   updateChat: (id: string, patch: { title?: string; pinned?: boolean }) =>
     request<ChatOut>(`/chats/${id}`, { method: "PATCH", json: patch }),
   artifacts: () => request<ArtifactOut[]>("/artifacts"),
+  // Developer API keys. The secret comes back from createApiKey and nowhere
+  // else, so the caller has to show it before it is gone.
+  apiKeys: () => request<ApiKeyOut[]>("/keys"),
+  createApiKey: (name: string) =>
+    request<ApiKeyCreated>("/keys", { method: "POST", json: { name } }),
+  revokeApiKey: (id: string) => request<null>(`/keys/${id}`, { method: "DELETE" }),
   messages: (chatId: string) => request<MessageOut[]>(`/chats/${chatId}/messages`),
   // Synthesizes on first call, then returns the cached audio attachment.
   speakMessage: (chatId: string, messageId: string) =>
