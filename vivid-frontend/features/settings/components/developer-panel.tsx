@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { AsyncError, AsyncLoading } from "@/components/ui/async-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { buttonClasses } from "@/components/ui/button-classes";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -18,12 +17,8 @@ import {
   useRevokeApiKey,
 } from "@/features/settings/hooks/use-api-keys";
 import { copyText } from "@/lib/clipboard";
-import { API_BASE, type ApiKeyOut } from "@/lib/backend/client";
+import type { ApiKeyOut } from "@/lib/backend/client";
 import { relativeTime } from "@/lib/format";
-
-// Swagger UI, served by the backend itself. Linked rather than rebuilt here:
-// it is generated from the routes, so it cannot drift from what the API does.
-const DOCS_URL = `${API_BASE}/docs`;
 
 function KeyRow({ apiKey, onRevoke }: { apiKey: ApiKeyOut; onRevoke: () => void }) {
   const revoked = apiKey.revoked_at !== null;
@@ -104,20 +99,6 @@ export function DeveloperPanel() {
             <Button size="sm" onClick={() => setNaming(true)} disabled={create.isPending}>
               Generate key
             </Button>
-          }
-        />
-        <SettingRow
-          label="API reference"
-          detail="Every endpoint, with a place to try them using your key."
-          control={
-            <a
-              href={DOCS_URL}
-              target="_blank"
-              rel="noreferrer"
-              className={buttonClasses({ variant: "secondary", size: "sm" })}
-            >
-              Open docs
-            </a>
           }
         />
       </SettingGroup>
